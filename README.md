@@ -1,3 +1,12 @@
+## What's in here?
+
+
+This repository contains code to accompany "Unsupervised Discovery of
+Multimodal Links in Multi-Image/Multi-Sentence Documents". The paper
+will be available on arXiv shortly.
+
+![Multi-Sentence/Multi-Image Retrieval Summary](https://github.com/jmhessel/multi-retrieval/raw/master/summary.png)
+
 ## Requirements
 This code requires python3 and several python
 libraries. You can install the python requirements with:
