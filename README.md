@@ -1,5 +1,3 @@
-Code for Unsupervised Discovery of Multimodal Links in Multi-Image/Multi-Sentence Documents
-
 ## Requirements
 This code requires python3 and several python
 libraries. You can install the python requirements with:
