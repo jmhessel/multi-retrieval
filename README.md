@@ -1,5 +1,3 @@
-Code for Unsupervised Discovery of Multimodal Links in Multi-Image/Multi-Sentence Documents
-
 ## Requirements
 This code requires python3 and several python
 libraries. You can install the python requirements with:
@@ -112,8 +110,8 @@ python3 train_doc.py --help
 From the paper, here's an example of running with hard negative
 mining, the AP similarity function, and 20 negative samples
 ```
-python3 train_doc.py data/mscoco/docs.json --image_id2row data/mscoco/id2row.json
---image_features data/mscoco/features.npy
+python3 train_doc.py data/mscoco/docs.json --image_id2row data/mscoco/id2row.json \
+--image_features data/mscoco/features.npy \
 --word2vec_binary data/GoogleNews-vectors-negative300.bin \
 --cached_word_embeddings mscoco_cached_word_embs.json \
 --print_metrics 1 \
