@@ -1,0 +1,7 @@
+keras>=2.0
+lapjv
+numpy
+scipy
+sklearn
+tqdm
+spacy
