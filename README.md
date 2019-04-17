@@ -144,7 +144,7 @@ datasets!
 - SIS ([original source](http://visionandlanguage.net/VIST/dataset.html)) [link](https://drive.google.com/open?id=1MN6gPGhymAHvPJL6dRTu-VbXfYlI0L7-)
 - DII-Stress ([original source](http://visionandlanguage.net/VIST/dataset.html)) [link](https://drive.google.com/open?id=1vLOMftRh8U5r3sn29X2l8XxVXQppsLYS)
 - RQA ([original source](https://hucvl.github.io/recipeqa/)) [link](https://drive.google.com/open?id=1BbD1OnV4h02QUk1eZT1hFWWKlDwUyz3O)
-- DIY [link](https://drive.google.com/open?id=1EdgL2VYrVTLccP8wHpynpFhv3PNuZiOv) (we collected this dataset)
+- DIY (we collected this dataset) [link](https://drive.google.com/open?id=1EdgL2VYrVTLccP8wHpynpFhv3PNuZiOv) 
 - WIKI ([original source](https://www.imageclef.org/wikidata)) [link](https://drive.google.com/open?id=1Ecb1LkTXX4sskx-PLB2o3vMru-8I8rEy)
 
 In addition, we have included scripts that generate the exact training commands executed in the paper itself. These are located in the paper_commands directory.
