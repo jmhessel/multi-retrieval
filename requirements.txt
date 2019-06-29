@@ -5,3 +5,4 @@ scipy
 sklearn
 tqdm
 spacy
+gensim
