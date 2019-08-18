@@ -730,8 +730,9 @@ def main():
 
         for k, v in history.history.items():
             output['history_{}'.format(k)] = v
-        for k, v in metrics_printer.history.items():
-            output['metrics_history_{}'.format(k)] = v
+        if args.print_metrics:
+            for k, v in metrics_printer.history.items():
+                output['metrics_history_{}'.format(k)] = v
 
 
         with open(args.output, 'wb') as f:
