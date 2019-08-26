@@ -1,5 +1,5 @@
 '''
-for i in predictions/train/*; do python visualize_predictions.py $i\/doc.json $i/pred_weights.npy $PWD/data/wiki/ prediction_dir/$i ; done;
+for i in predictions/train/*; do python visualize_predictions_html.py $i\/doc.json $i/pred_weights.npy $PWD/data/wiki/ prediction_dir/$i ; done;
 '''
 import argparse
 import numpy as np
