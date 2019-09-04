@@ -2,11 +2,21 @@
 
 
 This repository contains code to accompany "Unsupervised Discovery of
-Multimodal Links in Multi-Image/Multi-Sentence Documents." ([link](https://arxiv.org/abs/1904.07826))
+Multimodal Links in Multi-image/Multi-sentence Documents." (EMNLP 2019; [link](https://arxiv.org/abs/1904.07826))
 
 <p align="center">
   <img width="460" src="https://github.com/jmhessel/multi-retrieval/raw/master/summary.png">
 </p>
+
+If you find the code, data, or paper useful, please consider citing
+```
+@inproceedings{hessel-lee-mimno-2019unsupervised,
+  title={Unsupervised Discovery of Multimodal Links in Multi-Image, Multi-Sentence Documents},
+  author={Hessel, Jack and Lee, Lillian and Mimno, David},
+  booktitle={EMNLP},
+  year={2019}
+}
+```
 
 ## Requirements
 This code requires python3 and several python
