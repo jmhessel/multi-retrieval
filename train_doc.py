@@ -16,6 +16,7 @@ import tqdm
 import text_utils
 import image_utils
 import eval_utils
+import training_utils
 import bipartite_utils
 import pickle
 from pprint import pprint
@@ -212,112 +213,6 @@ def parse_args():
             os.makedirs(args.checkpoint_dir + '/test')
 
     return args
-
-
-def training_data_generator(data_in,
-                            image_matrix,
-                            image_idx2row,
-                            max_sentences_per_doc,
-                            max_images_per_doc,
-                            vocab,
-                            seq_len,
-                            augment=True,
-                            docs_per_batch=30,
-                            args=None,
-                            shuffle_sentences=False,
-                            shuffle_images=True,
-                            shuffle_docs=True,
-                            run_forever=True,
-                            force_exact_batch=False):
-    iter_num = 0
-    while True:
-        cur_start_idx = 0
-        cur_end_idx = docs_per_batch
-        while cur_start_idx < cur_end_idx:
-            cur_doc_b = data_in[cur_start_idx:cur_end_idx]
-            images, texts = [], []
-            image_n_docs, text_n_docs = [], []
-            for idx, vers in enumerate(cur_doc_b):
-                cur_images = [img[0] for img in vers[0]]
-                cur_text = [text[0] for text in vers[1]]
-
-                if shuffle_sentences and not (args and args.subsample_text > 0):
-                    #in that case, we'll shuffle later...
-                    np.random.shuffle(cur_text)
-
-                if shuffle_images and not (args and args.subsample_image > 0):
-                    #in that case, we'll shuffle later...
-                    np.random.shuffle(cur_images)
-
-                if args and args.subsample_image > 0:
-                    # if we are subsampling, we better shuffle...
-                    np.random.shuffle(cur_images)
-                    cur_images = cur_images[:args.subsample_image]
-
-                if args and args.subsample_text > 0:
-                    np.random.shuffle(cur_text)
-                    cur_text = cur_text[:args.subsample_text]
-
-                if args.end2end:
-                    cur_images = image_utils.images_to_images(cur_images, augment, args)
-                    if args and args.subsample_image > 0:
-                        image_padding = np.zeros(
-                            (args.subsample_image - cur_images.shape[0], 224, 224, 3))
-                    else:
-                        image_padding = np.zeros(
-                            (max_images_per_doc - cur_images.shape[0], 224, 224, 3))
-                else:
-                    cur_images = image_utils.images_to_matrix(
-                        cur_images, image_matrix, image_idx2row)
-                    if args and args.subsample_image > 0:
-                        image_padding = np.zeros(
-                            (args.subsample_image - cur_images.shape[0], cur_images.shape[-1]))
-                    else:
-                        image_padding = np.zeros(
-                            (max_images_per_doc - cur_images.shape[0], cur_images.shape[-1]))
-
-                cur_text = text_utils.text_to_matrix(cur_text, vocab, max_len=seq_len)
-
-                image_n_docs.append(cur_images.shape[0])
-                text_n_docs.append(cur_text.shape[0])
-
-                if args and args.subsample_text > 0:
-                    text_padding = np.zeros(
-                        (args.subsample_text - cur_text.shape[0], cur_text.shape[-1]))
-                else:
-                    text_padding = np.zeros(
-                        (max_sentences_per_doc - cur_text.shape[0], cur_text.shape[-1]))
-
-                cur_images = np.vstack([cur_images, image_padding])
-                cur_text = np.vstack([cur_text, text_padding])
-
-                cur_images = np.expand_dims(cur_images, 0)
-                cur_text = np.expand_dims(cur_text, 0)
-
-                images.append(cur_images)
-                texts.append(cur_text)
-
-            images = np.vstack(images)
-            texts = np.vstack(texts)
-
-            image_n_docs = np.expand_dims(np.array(image_n_docs), -1)
-            text_n_docs = np.expand_dims(np.array(text_n_docs), -1)
-
-            y = [np.zeros(len(text_n_docs)), np.zeros(len(image_n_docs))]
-
-            if not force_exact_batch or len(texts) == docs_per_batch:
-                yield ([texts,
-                        images,
-                        text_n_docs,
-                        image_n_docs], y)
-            cur_start_idx = cur_end_idx
-            cur_end_idx += docs_per_batch
-            cur_end_idx = min(len(data_in), cur_end_idx)
-
-        if shuffle_docs:
-            np.random.shuffle(data_in)
-        iter_num += 1
-        if not run_forever: break
 
 
 def main():
@@ -640,22 +535,6 @@ def main():
                                       shuffle_images=False,
                                       force_exact_batch=True)
 
-    class SaveDocModels(tf.keras.callbacks.Callback):
-        def on_train_begin(self, logs={}):
-            self.best_val_loss = np.inf
-            self.best_checkpoints_and_logs = None
-
-        def on_epoch_end(self, epoch, logs):
-            if logs['val_loss'] < self.best_val_loss:
-                print('New best val loss: {:.5f}'.format(logs['val_loss']))
-                self.best_val_loss = logs['val_loss']
-            else:
-                return
-            image_model_str = args.checkpoint_dir + '/image_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
-            sentence_model_str = args.checkpoint_dir + '/text_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
-            self.best_checkpoints_and_logs = (image_model_str, sentence_model_str, logs, epoch)
-            single_img_doc_model.save(image_model_str, overwrite=True)
-            single_text_doc_model.save(sentence_model_str, overwrite=True)
 
     sdm = SaveDocModels()
     callbacks = [tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
@@ -663,23 +542,6 @@ def main():
                                                       patience=args.lr_patience,
                                                       min_lr=args.min_lr,
                                                       verbose=True), sdm]
-
-    class PrintMetrics(tf.keras.callbacks.Callback):
-        def on_train_begin(self, logs=None):
-            self.epoch = []
-            self.history = {}
-
-        def on_epoch_end(self, epoch, logs):
-            metrics = eval_utils.print_all_metrics(val,
-                                                   image_features,
-                                                   image_idx2row,
-                                                   word2idx,
-                                                   single_text_doc_model,
-                                                   single_img_doc_model,
-                                                   args)
-            self.epoch.append(epoch)
-            for k, v in metrics.items():
-                self.history.setdefault(k, []).append(v)
 
 
     if args.print_metrics:
