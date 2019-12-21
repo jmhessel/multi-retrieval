@@ -485,46 +485,43 @@ def main():
 
     model.compile(opt, loss=identity)
 
-    train_gen = training_data_generator(train,
-                                        image_features,
-                                        image_idx2row,
-                                        max_n_sentence,
-                                        max_n_image,
-                                        word2idx,
-                                        args.seq_len,
-                                        args=args,
-                                        docs_per_batch=args.docs_per_batch,
-                                        shuffle_docs=True,
-                                        shuffle_sentences=False,
-                                        shuffle_images=True,
-                                        force_exact_batch=True)
+    train_seq = training_utils.DocumentSequence(
+        train,
+        image_features,
+        image_idx2row,
+        max_n_sentence,
+        max_n_image,
+        word2idx,
+        args=args,
+        shuffle_docs=True,
+        shuffle_sentences=False,
+        shuffle_images=True,
+        force_exact_batch=True)
 
     # pad val with repeated data so that batch sizes are consistent
     n_to_add = args.docs_per_batch - len(val) % args.docs_per_batch
     if n_to_add != args.docs_per_batch:
-        print('Padding iterator validation data with {} data points so batch sizes are consistent...'.format(n_to_add))
         padded_val = val + val[:n_to_add]
         assert not len(padded_val) % args.docs_per_batch
     else:
         padded_val = val
 
-    val_gen = training_data_generator(padded_val,
-                                      image_features,
-                                      image_idx2row,
-                                      max_n_sentence,
-                                      max_n_image,
-                                      word2idx,
-                                      args.seq_len,
-                                      args=args,
-                                      docs_per_batch=args.docs_per_batch,
-                                      augment=False,
-                                      shuffle_sentences=False,
-                                      shuffle_docs=False,
-                                      shuffle_images=False,
-                                      force_exact_batch=True)
+    val_seq = training_utils.DocumentSequence(
+        padded_val,
+        image_features,
+        image_idx2row,
+        max_n_sentence,
+        max_n_image,
+        word2idx,
+        args=args,
+        augment=False,
+        shuffle_sentences=False,
+        shuffle_docs=False,
+        shuffle_images=False,
+        force_exact_batch=True)
 
 
-    sdm = SaveDocModels()
+    sdm = training_utils.SaveDocModels()
     callbacks = [tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
                                                       factor=args.lr_decay,
                                                       patience=args.lr_patience,
@@ -533,15 +530,13 @@ def main():
 
 
     if args.print_metrics:
-        metrics_printer = PrintMetrics()
+        metrics_printer = training_utils.PrintMetrics()
         callbacks.append(metrics_printer)
 
     history = model.fit_generator(
-        train_gen,
-        steps_per_epoch=(len(train) // args.docs_per_batch + (0 if len(train) % args.docs_per_batch == 0 else 1)) if args.test_eval <= 0 else args.test_eval,
+        train_seq,
         epochs=args.n_epochs,
-        validation_data=val_gen,
-        validation_steps=len(val) // args.docs_per_batch if args.test_eval <= 0 else args.test_eval,
+        validation_data=val_seq,
         callbacks=callbacks)
 
     if args.output:
