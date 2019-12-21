@@ -147,11 +147,6 @@ def parse_args():
                         type=float,
                         default=.0000001,
                         help='What learning rate decay factor should we use?')
-    parser.add_argument('--val_loss_mean_neg_sample',
-                        type=int,
-                        default=0,
-                        help='Instead of tracking hard negative validation loss, '
-                        'should we track top-5 mean negative sample loss?')
     parser.add_argument('--full_image_paths',
                         type=int,
                         default=0,
@@ -469,13 +464,6 @@ def main():
         pool_fn = lambda x: tf.reduce_max(x, axis=1, keepdims=True)
     else:
         raise NotImplementedError('{} is not a valid for args.neg_mining'.format(args.neg_mining))
-
-    if args.val_loss_mean_neg_sample and args.neg_mining != 'negative_sample':
-        pool_fn_tmp = pool_fn
-        # at train time, do hard negative mining. Val time, do top-5 negative mining.
-        pool_fn = lambda x: K.in_train_phase(
-            pool_fn_tmp(x),
-            tf.reduce_mean(tf.math.top_k(x, k=5)[0], axis=1, keepdims=True))
 
     neg_img_loss = tf.keras.layers.Lambda(pool_fn, name='neg_img')(neg_img_hinge)
     neg_text_loss = tf.keras.layers.Lambda(pool_fn, name='neg_text')(neg_text_hinge)
