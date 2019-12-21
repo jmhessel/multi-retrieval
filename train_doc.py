@@ -541,7 +541,6 @@ def main():
 
     if args.output:
         best_image_model_str, best_sentence_model_str, best_logs, best_epoch = sdm.best_checkpoints_and_logs
-
         single_text_doc_model = tf.keras.models.load_model(best_sentence_model_str)
         single_image_doc_model = tf.keras.models.load_model(best_image_model_str)
 
