@@ -121,6 +121,16 @@ class DocumentSequence(tf.keras.utils.Sequence):
 
 
 class SaveDocModels(tf.keras.callbacks.Callback):
+
+    def __init__(self,
+                 checkpoint_dir,
+                 single_image_doc_model,
+                 single_text_doc_model):
+        super(SaveDocModels, self).__init__()
+        self.checkpoint_dir = checkpoint_dir
+        self.single_image_doc_model = single_image_doc_model
+        self.single_text_doc_model = single_text_doc_model
+        
     def on_train_begin(self, logs={}):
         self.best_val_loss = np.inf
         self.best_checkpoints_and_logs = None
@@ -131,26 +141,44 @@ class SaveDocModels(tf.keras.callbacks.Callback):
             self.best_val_loss = logs['val_loss']
         else:
             return
-        image_model_str = args.checkpoint_dir + '/image_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
-        sentence_model_str = args.checkpoint_dir + '/text_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
+        image_model_str = self.checkpoint_dir + '/image_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
+        sentence_model_str = self.checkpoint_dir + '/text_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
         self.best_checkpoints_and_logs = (image_model_str, sentence_model_str, logs, epoch)
-        single_img_doc_model.save(image_model_str, overwrite=True)
-        single_text_doc_model.save(sentence_model_str, overwrite=True)
+        self.single_image_doc_model.save(image_model_str, overwrite=True)
+        self.single_text_doc_model.save(sentence_model_str, overwrite=True)
 
 
 class PrintMetrics(tf.keras.callbacks.Callback):
+    def __init__(self,
+                 val,
+                 image_features,
+                 image_idx2row,
+                 word2idx,
+                 single_text_doc_model,
+                 single_img_doc_model,
+                 args):
+        super(PrintMetrics, self).__init__()
+        self.val = val
+        self.image_features = image_features
+        self.image_idx2row = image_idx2row
+        self.word2idx = word2idx
+        self.single_text_doc_model = single_text_doc_model
+        self.single_img_doc_model = single_img_doc_model
+        self.args = args
+        
     def on_train_begin(self, logs=None):
         self.epoch = []
         self.history = {}
 
     def on_epoch_end(self, epoch, logs):
-        metrics = eval_utils.print_all_metrics(val,
-                                               image_features,
-                                               image_idx2row,
-                                               word2idx,
-                                               single_text_doc_model,
-                                               single_img_doc_model,
-                                               args)
+        metrics = eval_utils.print_all_metrics(
+            self.val,
+            self.image_features,
+            self.image_idx2row,
+            self.word2idx,
+            self.single_text_doc_model,
+            self.single_img_doc_model,
+            self.args)
         self.epoch.append(epoch)
         for k, v in metrics.items():
             self.history.setdefault(k, []).append(v)

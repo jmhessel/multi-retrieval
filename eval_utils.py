@@ -38,8 +38,8 @@ def compute_match_metrics_doc(docs,
         cur_images = np.expand_dims(cur_images, 0)
         cur_text = np.expand_dims(cur_text, 0)
 
-        text_vec = text_trans.predict_on_batch(cur_text) 
-        image_vec = image_trans.predict_on_batch(cur_images)
+        text_vec = np.array(text_trans.predict_on_batch(cur_text))
+        image_vec = np.array(image_trans.predict_on_batch(cur_images))
 
         text_vec = text_vec[0,:n_text,:]
         image_vec = image_vec[0,:n_image,:]

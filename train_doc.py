@@ -264,7 +264,7 @@ def main():
     # this input tells you how many sentences are really in each doc
     text_n_inp = tf.keras.layers.Input((1,), dtype='int32')
     if args.end2end:
-        # (n docs, n sent (dynamic), x, y, color)
+        # (n docs, n image (dynamic), x, y, color)
         img_inp = tf.keras.layers.Input((None, 224, 224, 3))
     else:
         # (n docs, n image (dynamic), feature dim)
@@ -280,9 +280,9 @@ def main():
                                                weights=[we_init] if we_init is not None else None,
                                                mask_zero=True)
     if args.rnn_type == 'GRU':
-        word_rnn = tf.keras.layers.GRU(args.joint_emb_dim, recurrent_dropout=args.dropout)
+        word_rnn = tf.keras.layers.GRU(args.joint_emb_dim)
     else:
-        word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim, recurrent_dropout=args.dropout)
+        word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim)
     embedded_text_inp = word_embedding(text_inp)
     extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
     # extracted_text_features is now (n docs, max n setnences, multimodal dim)
@@ -357,7 +357,6 @@ def main():
     text_enc = mask_slice_and_stack([extracted_text_features, text_n_inp])
     img_enc = mask_slice_and_stack([extracted_img_features, img_n_inp])
 
-
     def DC_sim(sim_matrix):
         text2im_S = tf.reduce_mean(tf.reduce_max(sim_matrix, 1))
         im2text_S = tf.reduce_mean(tf.reduce_max(sim_matrix, 0))
@@ -389,7 +388,6 @@ def main():
     elif args.sim_mode == 'TK':
         sim_fn = TK_sim
     elif args.sim_mode == 'AP':
-        raise NotImplementedError('TODO. AP has not been implemented in TF2.0 yet.')
         sim_fn = AP_sim
     else:
         raise NotImplementedError('{} is not implemented sim function'.format(args.sim_fn))
@@ -441,6 +439,9 @@ def main():
 
     model.compile(opt, loss=identity)
 
+    if args.test_eval > 0:
+        train = train[:args.test_eval * args.docs_per_batch]
+    
     train_seq = training_utils.DocumentSequence(
         train,
         image_features,
@@ -476,8 +477,11 @@ def main():
         shuffle_images=False,
         force_exact_batch=True)
 
-
-    sdm = training_utils.SaveDocModels()
+    sdm = training_utils.SaveDocModels(
+        args.checkpoint_dir,
+        single_text_doc_model,
+        single_text_doc_model)
+    
     callbacks = [tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
                                                       factor=args.lr_decay,
                                                       patience=args.lr_patience,
@@ -486,7 +490,14 @@ def main():
 
 
     if args.print_metrics:
-        metrics_printer = training_utils.PrintMetrics()
+        metrics_printer = training_utils.PrintMetrics(
+            val,
+            image_features,
+            image_idx2row,
+            word2idx,
+            single_text_doc_model,
+            single_img_doc_model,
+            args)
         callbacks.append(metrics_printer)
 
     history = model.fit_generator(
