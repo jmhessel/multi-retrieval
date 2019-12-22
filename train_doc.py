@@ -400,8 +400,12 @@ def main():
         return sims
 
     all_sims = make_sims([text_enc, img_enc])
+    get_pos_neg_sims = model_utils.make_get_pos_neg_sims(
+        args,
+        sim_fn)
+    
     pos_sims, neg_img_sims, neg_text_sims = tf.keras.layers.Lambda(
-        model_utils.get_pos_neg_sims)([all_sims, text_n_inp, img_n_inp])
+        get_pos_neg_sims)([all_sims, text_n_inp, img_n_inp])
 
     def margin_output(inp):
         pos_s, neg_s = inp
