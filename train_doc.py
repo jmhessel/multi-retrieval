@@ -549,7 +549,6 @@ def main():
             for k, v in metrics_printer.history.items():
                 output['metrics_history_{}'.format(k)] = v
 
-
         with open(args.output, 'wb') as f:
             pickle.dump(output, f, protocol=pickle.HIGHEST_PROTOCOL)
         print('saved output to {}'.format(args.output))
