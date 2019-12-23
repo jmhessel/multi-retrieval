@@ -112,11 +112,10 @@ class DocumentSequence(tf.keras.utils.Sequence):
 
         y = [np.zeros(len(text_n_docs)), np.zeros(len(image_n_docs))]
 
-        if not self.force_exact_batch or len(texts) == self.args.docs_per_batch:
-            return ([texts,
-                     images,
-                     text_n_docs,
-                     image_n_docs], y)
+        return ([texts,
+                 images,
+                 text_n_docs,
+                 image_n_docs], y)
         
     def on_epoch_end(self):
         if self.shuffle_docs:
