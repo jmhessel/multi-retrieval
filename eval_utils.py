@@ -1,5 +1,5 @@
 import numpy as np
-
+import tensorflow as tf
 from sklearn.metrics import roc_auc_score
 
 import collections
@@ -21,7 +21,11 @@ def compute_match_metrics_doc(docs,
                               ks=[1,2,3,4,5,6,7,8,9,10]):
 
     all_aucs, all_match_metrics = [], collections.defaultdict(list)
-    
+    all_texts, all_images = [], []
+
+    # supress warwning that I believe is thrown by keras' timedistributed
+    # over dynamic tensors...
+    tf.get_logger().setLevel('ERROR')
     for images, text, meta in tqdm.tqdm(docs):
         # text by image matrix
         cur_text = [t[0] for t in text]
@@ -35,11 +39,11 @@ def compute_match_metrics_doc(docs,
         else:
             cur_images = image_utils.images_to_matrix(cur_images, image_matrix, image_idx2row)
 
-        cur_images = np.expand_dims(cur_images, 0)
         cur_text = np.expand_dims(cur_text, 0)
-
-        text_vec = np.array(text_trans.predict_on_batch(cur_text))
-        image_vec = np.array(image_trans.predict_on_batch(cur_images))
+        cur_images = np.expand_dims(cur_images, 0)
+    
+        text_vec = text_trans.predict(cur_text)
+        image_vec = image_trans.predict(cur_images)
 
         text_vec = text_vec[0,:n_text,:]
         image_vec = image_vec[0,:n_image,:]
@@ -69,6 +73,7 @@ def compute_match_metrics_doc(docs,
             all_match_metrics[k].append(np.mean(pred_order[:k]))
 
         all_aucs.append(roc_auc_score(true_adj, pred_adj))
+    tf.get_logger().setLevel('INFO')
     return all_aucs, all_match_metrics
 
 

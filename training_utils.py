@@ -124,12 +124,13 @@ class SaveDocModels(tf.keras.callbacks.Callback):
 
     def __init__(self,
                  checkpoint_dir,
-                 single_image_doc_model,
-                 single_text_doc_model):
+                 single_text_doc_model,
+                 single_image_doc_model):
         super(SaveDocModels, self).__init__()
         self.checkpoint_dir = checkpoint_dir
-        self.single_image_doc_model = single_image_doc_model
         self.single_text_doc_model = single_text_doc_model
+        self.single_image_doc_model = single_image_doc_model
+        
         
     def on_train_begin(self, logs={}):
         self.best_val_loss = np.inf
@@ -144,8 +145,9 @@ class SaveDocModels(tf.keras.callbacks.Callback):
         image_model_str = self.checkpoint_dir + '/image_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
         sentence_model_str = self.checkpoint_dir + '/text_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
         self.best_checkpoints_and_logs = (image_model_str, sentence_model_str, logs, epoch)
-        self.single_image_doc_model.save(image_model_str, overwrite=True)
-        self.single_text_doc_model.save(sentence_model_str, overwrite=True)
+
+        self.single_text_doc_model.save(sentence_model_str, overwrite=True, save_format='h5')
+        self.single_image_doc_model.save(image_model_str, overwrite=True, save_format='h5')
 
 
 class PrintMetrics(tf.keras.callbacks.Callback):

@@ -441,7 +441,8 @@ def main():
 
     if args.test_eval > 0:
         train = train[:args.test_eval * args.docs_per_batch]
-    
+        val = val[:args.test_eval * args.docs_per_batch]
+        
     train_seq = training_utils.DocumentSequence(
         train,
         image_features,
@@ -480,7 +481,7 @@ def main():
     sdm = training_utils.SaveDocModels(
         args.checkpoint_dir,
         single_text_doc_model,
-        single_text_doc_model)
+        single_img_doc_model)
     
     callbacks = [tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
                                                       factor=args.lr_decay,
