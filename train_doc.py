@@ -453,8 +453,7 @@ def main():
         args=args,
         shuffle_docs=True,
         shuffle_sentences=False,
-        shuffle_images=True,
-        force_exact_batch=True)
+        shuffle_images=True)
 
     # pad val with repeated data so that batch sizes are consistent
     n_to_add = args.docs_per_batch - len(val) % args.docs_per_batch
@@ -475,8 +474,7 @@ def main():
         augment=False,
         shuffle_sentences=False,
         shuffle_docs=False,
-        shuffle_images=False,
-        force_exact_batch=True)
+        shuffle_images=False)
 
     sdm = training_utils.SaveDocModels(
         args.checkpoint_dir,
@@ -501,7 +499,7 @@ def main():
             args)
         callbacks.append(metrics_printer)
 
-    history = model.fit_generator(
+    history = model.fit(
         train_seq,
         epochs=args.n_epochs,
         validation_data=val_seq,

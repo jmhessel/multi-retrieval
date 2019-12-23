@@ -17,8 +17,7 @@ class DocumentSequence(tf.keras.utils.Sequence):
                  augment=True,
                  shuffle_sentences=False,
                  shuffle_images=True,
-                 shuffle_docs=True,
-                 force_exact_batch=False):
+                 shuffle_docs=True):
         self.data_in = data_in
         self.image_matrix = image_matrix
         self.image_idx2row = image_idx2row
@@ -30,7 +29,6 @@ class DocumentSequence(tf.keras.utils.Sequence):
         self.shuffle_sentences = shuffle_sentences
         self.shuffle_images = shuffle_images
         self.shuffle_docs = shuffle_docs
-        self.force_exact_batch = force_exact_batch
 
         
     def __len__(self):
@@ -41,6 +39,11 @@ class DocumentSequence(tf.keras.utils.Sequence):
         start = idx * self.args.docs_per_batch
         end = (idx + 1) * self.args.docs_per_batch
         cur_doc_b = self.data_in[start: end]
+
+        if len(cur_doc_b) == 1:
+            # add one dummy document to make sure the negative sampling
+            # objective can be computed
+            cur_doc_b = [self.data_in[0]] + cur_doc_b
 
         images, texts = [], []
         image_n_docs, text_n_docs = [], []
