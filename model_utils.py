@@ -3,6 +3,7 @@ Model utility functions
 '''
 import tensorflow as tf
 import collections
+import sys
 
 
 def make_get_pos_neg_sims(args, sim_fn):

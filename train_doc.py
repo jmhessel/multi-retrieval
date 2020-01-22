@@ -256,19 +256,21 @@ def main():
     else:
         ground_truth = False
 
-
     # Step 1: Specify model inputs/outputs:
 
-    # (n docs, n sent (dynamic), max n words,)
-    text_inp = tf.keras.layers.Input((None, args.seq_len))
+    # (n docs, n sent, max n words,)
+    # see the comment in text_utils.text_to_matrix re: args.seq_len+1.
+    # all sequences are pre-pended with a padding token.
+    text_inp = tf.keras.layers.Input((max_n_sentence, args.seq_len+1))
+
     # this input tells you how many sentences are really in each doc
     text_n_inp = tf.keras.layers.Input((1,), dtype='int32')
     if args.end2end:
-        # (n docs, n image (dynamic), x, y, color)
-        img_inp = tf.keras.layers.Input((None, 224, 224, 3))
+        # (n docs, n image, x, y, color)
+        img_inp = tf.keras.layers.Input((max_n_image, 224, 224, 3))
     else:
-        # (n docs, n image (dynamic), feature dim)
-        img_inp = tf.keras.layers.Input((None, image_features.shape[1]))
+        # (n docs, n image, feature dim)
+        img_inp = tf.keras.layers.Input((max_n_image, image_features.shape[1]))
     # this input tells you how many images are really in each doc
     img_n_inp = tf.keras.layers.Input((1,), dtype='int32')
 
@@ -481,8 +483,7 @@ def main():
         single_text_doc_model,
         single_img_doc_model)
     
-    callbacks = [tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
-                                                      factor=args.lr_decay,
+    callbacks = [tf.keras.callbacks.ReduceLROnPlateau(factor=args.lr_decay,
                                                       patience=args.lr_patience,
                                                       min_lr=args.min_lr,
                                                       verbose=True), sdm]
@@ -498,12 +499,13 @@ def main():
             single_img_doc_model,
             args)
         callbacks.append(metrics_printer)
-
+        
     history = model.fit(
         train_seq,
         epochs=args.n_epochs,
         validation_data=val_seq,
-        callbacks=callbacks)
+        callbacks=callbacks,
+        shuffle=False)
 
     if args.output:
         best_image_model_str, best_sentence_model_str, best_logs, best_epoch = sdm.best_checkpoints_and_logs
