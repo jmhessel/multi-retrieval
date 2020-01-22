@@ -139,7 +139,8 @@ python3 train_doc.py data/mscoco/docs.json --image_id2row data/mscoco/id2row.jso
 --print_metrics 1 \
 --output mscoco_results.pkl \
 --sim_mode AP \
---docs_per_batch 21
+--docs_per_batch 21 \
+--cached_vocab mscoco_vocab.json
 ```
 
 ## How to reproduce the results of the paper:
@@ -160,3 +161,4 @@ datasets!
 - WIKI ([original source](https://www.imageclef.org/wikidata)) [link](https://drive.google.com/open?id=1Ecb1LkTXX4sskx-PLB2o3vMru-8I8rEy)
 
 In addition, we have included scripts that generate the exact training commands executed in the paper itself. These are located in the paper_commands directory.
+*Note, however, that the code used for the paper is now located in the tf1 branch. The main branch has been ported to TF2.*
