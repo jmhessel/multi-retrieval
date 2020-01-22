@@ -18,6 +18,8 @@ If you find the code, data, or paper useful, please consider citing
 }
 ```
 
+*note: I recently upgraded the implementation of this paper to TF2. If you're interested in the exact code used for the EMNLP paper for reproduction purposes, you should check out the tf1 branch, and run with those requirements.*
+
 ## Requirements
 This code requires python3 and several python
 libraries. You can install the python requirements with:
@@ -25,8 +27,6 @@ libraries. You can install the python requirements with:
 ```
 pip3 install -r requirements.txt
 ```
-
-*note, this library is implemented using tensorflow 1.X; I am in the process of porting it to tensorflow 2.0 in the tf2 branch, but some features are not supported. Currently, for reproduction purposes, the tensorflow 1.X version is recommended*
 
 Also --- it helps performance to initialize the word embedding
 matrices with word2vec embeddings. You can download those embeddings
