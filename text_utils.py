@@ -1,9 +1,10 @@
 import os
 import json
 import collections
-import keras
+import tensorflow as tf
 import tqdm
 import numpy as np
+import pprint
 
 from gensim.models.keyedvectors import KeyedVectors
 
@@ -65,9 +66,23 @@ def text_to_matrix(captions, vocab, max_len=15, padding='pre'):
     seqs = []
     for c in captions:
         tokens = preprocess_caption(c).split()
-        idxs = [vocab[v] if v in vocab else vocab['<UNK>'] for v in tokens]
+
+        # for reasons I dont understand, the new version of CUDNN
+        # doesn't play nice with padding, etc.  After painstakingly
+        # narrowing down why this happens, CUDNN errors when:
+        
+        # 1) you're using RNN
+        # 2) your batch consists of fully-padded sequences and non-padded sequences only
+
+        # I filed a tensorflow issue:
+        # see https://github.com/tensorflow/tensorflow/issues/36139
+
+        # To solve this, for now, I'm just adding a padding char to all sequences.
+        # This padding token can be removed in the future when this issue is fixed.
+        
+        idxs = [vocab['<PAD>']] + [vocab[v] if v in vocab else vocab['<UNK>'] for v in tokens]
         seqs.append(idxs)
-    m_mat = keras.preprocessing.sequence.pad_sequences(seqs, maxlen=max_len,
-                                                       padding=padding, truncating='post',
-                                                       value=0)
+    m_mat = tf.keras.preprocessing.sequence.pad_sequences(seqs, maxlen=max_len+1,
+                                                          padding=padding, truncating='post',
+                                                          value=0)
     return m_mat

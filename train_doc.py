@@ -2,12 +2,12 @@
 Code to accompany
 "Unsupervised Discovery of Multimodal Links in Multi-Sentence/Multi-Image Documents."
 https://github.com/jmhessel/multi-retrieval
+
+This is a work-in-progress TF2.0 port.
 '''
 import argparse
 import collections
 import json
-import keras
-import keras.backend as K
 import tensorflow as tf
 import numpy as np
 import os
@@ -16,6 +16,8 @@ import tqdm
 import text_utils
 import image_utils
 import eval_utils
+import model_utils
+import training_utils
 import bipartite_utils
 import pickle
 from pprint import pprint
@@ -57,11 +59,12 @@ def parse_args():
                         type=str)
     parser.add_argument('--sim_mode',
                         help='What similarity function should we use?',
-                        default='DC',
+                        default='AP',
                         choices=['DC','TK','AP'],
                         type=str)
     parser.add_argument('--sim_mode_k',
-                        help='If --sim_mode=TK/AP, what should the k be? k=-1 for dynamic = min(n_images, n_sentences))? '
+                        help='If --sim_mode=TK/AP, what should the k be? '
+                        'k=-1 for dynamic = min(n_images, n_sentences))? '
                         'if k > 0, then k=ceil(1./k * min(n_images, n_sentences))',
                         default=-1,
                         type=float)
@@ -105,10 +108,6 @@ def parse_args():
                         type=int,
                         help='Random seed',
                         default=1)
-    parser.add_argument('--gpu_memory_frac',
-                        type=float,
-                        default=1.0,
-                        help='How much of the GPU should we allow tensorflow to allocate?')
     parser.add_argument('--dropout',
                         type=float,
                         default=0.4,
@@ -149,11 +148,6 @@ def parse_args():
                         type=float,
                         default=.0000001,
                         help='What learning rate decay factor should we use?')
-    parser.add_argument('--val_loss_mean_neg_sample',
-                        type=int,
-                        default=0,
-                        help='Instead of tracking hard negative validation loss, '
-                        'should we track top-5 mean negative sample loss?')
     parser.add_argument('--full_image_paths',
                         type=int,
                         default=0,
@@ -171,15 +165,18 @@ def parse_args():
     parser.add_argument('--save_predictions',
                         type=str,
                         default=None,
-                        help='Should we save the train/val/test predictions? If so --- they will be saved in this directory.')
+                        help='Should we save the train/val/test predictions? '
+                        'If so --- they will be saved in this directory.')
     parser.add_argument('--image_model_checkpoint',
                         type=str,
                         default=None,
-                        help='If set, the image model will be initialized from this model checkpoint.')
+                        help='If set, the image model will be initialized from '
+                        'this model checkpoint.')
     parser.add_argument('--text_model_checkpoint',
                         type=str,
                         default=None,
-                        help='If set, the text model will be initialized from this model checkpoint.')
+                        help='If set, the text model will be initialized from '
+                        'this model checkpoint.')
 
     args = parser.parse_args()
 
@@ -214,112 +211,9 @@ def parse_args():
     return args
 
 
-def training_data_generator(data_in,
-                            image_matrix,
-                            image_idx2row,
-                            max_sentences_per_doc,
-                            max_images_per_doc,
-                            vocab,
-                            seq_len,
-                            augment=True,
-                            docs_per_batch=30,
-                            args=None,
-                            shuffle_sentences=False,
-                            shuffle_images=True,
-                            shuffle_docs=True,
-                            run_forever=True,
-                            force_exact_batch=False):
-    iter_num = 0
-    while True:
-        cur_start_idx = 0
-        cur_end_idx = docs_per_batch
-        while cur_start_idx < cur_end_idx:
-            cur_doc_b = data_in[cur_start_idx:cur_end_idx]
-            images, texts = [], []
-            image_n_docs, text_n_docs = [], []
-            for idx, vers in enumerate(cur_doc_b):
-                cur_images = [img[0] for img in vers[0]]
-                cur_text = [text[0] for text in vers[1]]
-
-                if shuffle_sentences and not (args and args.subsample_text > 0):#in that case, we'll shuffle later...
-                    np.random.shuffle(cur_text)
-
-                if shuffle_images and not (args and args.subsample_image > 0):#in that case, we'll shuffle later...
-                    np.random.shuffle(cur_images)
-
-                if args and args.subsample_image > 0:
-                    # if we are subsampling, we better shuffle...
-                    np.random.shuffle(cur_images)
-                    cur_images = cur_images[:args.subsample_image]
-
-                if args and args.subsample_text > 0:
-                    np.random.shuffle(cur_text)
-                    cur_text = cur_text[:args.subsample_text]
-
-                if args.end2end:
-                    cur_images = image_utils.images_to_images(cur_images, augment, args)
-                    if args and args.subsample_image > 0:
-                        image_padding = np.zeros((args.subsample_image - cur_images.shape[0], 224, 224, 3))
-                    else:
-                        image_padding = np.zeros((max_images_per_doc - cur_images.shape[0], 224, 224, 3))
-                else:
-                    cur_images = image_utils.images_to_matrix(cur_images, image_matrix, image_idx2row)
-                    if args and args.subsample_image > 0:
-                        image_padding = np.zeros((args.subsample_image - cur_images.shape[0], cur_images.shape[-1]))
-                    else:
-                        image_padding = np.zeros((max_images_per_doc - cur_images.shape[0], cur_images.shape[-1]))
-
-                cur_text = text_utils.text_to_matrix(cur_text, vocab, max_len=seq_len)
-
-                image_n_docs.append(cur_images.shape[0])
-                text_n_docs.append(cur_text.shape[0])
-
-                if args and args.subsample_text > 0:
-                    text_padding = np.zeros((args.subsample_text - cur_text.shape[0], cur_text.shape[-1]))
-                else:
-                    text_padding = np.zeros((max_sentences_per_doc - cur_text.shape[0], cur_text.shape[-1]))
-
-                cur_images = np.vstack([cur_images, image_padding])
-                cur_text = np.vstack([cur_text, text_padding])
-
-                cur_images = np.expand_dims(cur_images, 0)
-                cur_text = np.expand_dims(cur_text, 0)
-
-                images.append(cur_images)
-                texts.append(cur_text)
-
-            images = np.vstack(images)
-            texts = np.vstack(texts)
-
-            image_n_docs = np.expand_dims(np.array(image_n_docs), -1)
-            text_n_docs = np.expand_dims(np.array(text_n_docs), -1)
-
-            y = [np.zeros(len(text_n_docs)), np.zeros(len(image_n_docs))]
-
-            if not force_exact_batch or len(texts) == docs_per_batch:
-                yield ([texts,
-                        images,
-                        text_n_docs,
-                        image_n_docs], y)
-            cur_start_idx = cur_end_idx
-            cur_end_idx += docs_per_batch
-            cur_end_idx = min(len(data_in), cur_end_idx)
-
-        if shuffle_docs:
-            np.random.shuffle(data_in)
-        iter_num += 1
-        if not run_forever: break
-
-
 def main():
     args = parse_args()
     np.random.seed(args.seed)
-
-    if args.gpu_memory_frac > 0 and args.gpu_memory_frac < 1:
-        config = tf.ConfigProto()
-        config.gpu_options.per_process_gpu_memory_fraction = args.gpu_memory_frac
-        session = tf.Session(config=config)
-        K.set_session(session)
 
     data = load_data(args.documents)
     train, val, test = data['train'], data['val'], data['test']
@@ -342,7 +236,8 @@ def main():
     print('Vocab size was {}'.format(len(word2idx)))
 
     if args.word2vec_binary:
-        we_init = text_utils.get_word2vec_matrix(word2idx, args.cached_word_embeddings, args.word2vec_binary)
+        we_init = text_utils.get_word2vec_matrix(
+            word2idx, args.cached_word_embeddings, args.word2vec_binary)
     else:
         we_init = np.random.uniform(low=-.02, high=.02, size=(len(word2idx), 300))
 
@@ -361,83 +256,85 @@ def main():
     else:
         ground_truth = False
 
-
     # Step 1: Specify model inputs/outputs:
 
-    # (n docs, n sent (dynamic), max n words,)
-    text_inp = keras.layers.Input((None, args.seq_len))
+    # (n docs, n sent, max n words,)
+    # see the comment in text_utils.text_to_matrix re: args.seq_len+1.
+    # all sequences are pre-pended with a padding token.
+    text_inp = tf.keras.layers.Input((None, args.seq_len+1))
+
     # this input tells you how many sentences are really in each doc
-    text_n_inp = keras.layers.Input((1,), dtype='int32')
+    text_n_inp = tf.keras.layers.Input((1,), dtype='int32')
     if args.end2end:
-        # (n docs, n sent (dynamic), x, y, color)
-        img_inp = keras.layers.Input((None, 224, 224, 3))
+        # (n docs, n image, x, y, color)
+        img_inp = tf.keras.layers.Input((None, 224, 224, 3))
     else:
-        # (n docs, n image (dynamic), feature dim)
-        img_inp = keras.layers.Input((None, image_features.shape[1]))
+        # (n docs, n image, feature dim)
+        img_inp = tf.keras.layers.Input((None, image_features.shape[1]))
     # this input tells you how many images are really in each doc
-    img_n_inp = keras.layers.Input((1,), dtype='int32')
+    img_n_inp = tf.keras.layers.Input((1,), dtype='int32')
 
     # Step 2: Define transformations to shared multimodal space.
 
     # Step 2.1: The text model:
-    word_embedding = keras.layers.Embedding(len(word2idx),
-                                            word_emb_dim,
-                                            weights=[we_init] if we_init is not None else None,
-                                            mask_zero=True)
+    word_embedding = tf.keras.layers.Embedding(len(word2idx),
+                                               word_emb_dim,
+                                               weights=[we_init] if we_init is not None else None,
+                                               mask_zero=True)
     if args.rnn_type == 'GRU':
-        word_rnn = keras.layers.GRU(args.joint_emb_dim, recurrent_dropout=args.dropout)
+        word_rnn = tf.keras.layers.GRU(args.joint_emb_dim)
     else:
-        word_rnn = keras.layers.LSTM(args.joint_emb_dim, recurrent_dropout=args.dropout)
+        word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim)
     embedded_text_inp = word_embedding(text_inp)
-    extracted_text_features = keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
+    extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
     # extracted_text_features is now (n docs, max n setnences, multimodal dim)
 
     # Step 2.2: The image model:
-    img_projection = keras.layers.Dense(args.joint_emb_dim)
+    img_projection = tf.keras.layers.Dense(args.joint_emb_dim)
     if args.end2end:
-        from keras.applications.nasnet import NASNetMobile
-        cnn = keras.applications.nasnet.NASNetMobile(
+        from tf.keras.applications.nasnet import NASNetMobile
+        cnn = tf.keras.applications.nasnet.NASNetMobile(
             include_top=False, input_shape=(224, 224, 3), pooling='avg')
 
-        extracted_img_features = keras.layers.TimeDistributed(cnn)(img_inp)
+        extracted_img_features = tf.keras.layers.TimeDistributed(cnn)(img_inp)
         if args.dropout > 0.0:
-            extracted_img_features = keras.layers.TimeDistributed(
-                keras.layers.Dropout(args.dropout))(extracted_img_features)
+            extracted_img_features = tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dropout(args.dropout))(extracted_img_features)
         extracted_img_features = keras.layers.TimeDistributed(img_projection)(
             extracted_img_features)
     else:
-        img_projection = keras.layers.Dense(args.joint_emb_dim)
-        extracted_img_features = keras.layers.Masking()(img_inp)
+        extracted_img_features = tf.keras.layers.Masking()(img_inp)
         if args.dropout > 0.0:
-            extracted_img_features = keras.layers.TimeDistributed(
-                keras.layers.Dropout(args.dropout))(extracted_img_features)
-        extracted_img_features = keras.layers.TimeDistributed(
+            extracted_img_features = tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dropout(args.dropout))(extracted_img_features)
+        extracted_img_features = tf.keras.layers.TimeDistributed(
             img_projection)(extracted_img_features)
 
     # extracted_img_features is now (n docs, max n images, multimodal dim)
 
     # Step 3: L2 normalize each extracted feature vectors to finish, and
     # define the models that can be run at test-time.
-    extracted_text_features = keras.layers.Lambda(
-        lambda x: K.l2_normalize(x, axis=-1))(extracted_text_features)
-    extracted_img_features = keras.layers.Lambda(
-        lambda x: K.l2_normalize(x, axis=-1))(extracted_img_features)
-    single_text_doc_model = keras.models.Model(
+
+    l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=-1))
+    
+    extracted_text_features = l2_norm_layer(extracted_text_features)
+    extracted_img_features = l2_norm_layer(extracted_img_features)
+    single_text_doc_model = tf.keras.models.Model(
         inputs=text_inp,
         outputs=extracted_text_features)
-    single_img_doc_model = keras.models.Model(
+    single_img_doc_model = tf.keras.models.Model(
         inputs=img_inp,
         outputs=extracted_img_features)
 
     if args.text_model_checkpoint:
         print('Loading pretrained text model from {}'.format(
             args.text_model_checkpoint))
-        single_text_doc_model = keras.models.load_model(args.text_model_checkpoint)
+        single_text_doc_model = tf.keras.models.load_model(args.text_model_checkpoint)
 
     if args.image_model_checkpoint:
         print('Loading pretrained image model from {}'.format(
             args.image_model_checkpoint))
-        single_img_doc_model = keras.models.load_model(args.image_model_checkpoint)
+        single_img_doc_model = tf.keras.models.load_model(args.image_model_checkpoint)
 
 
     # Step 4: Extract/stack the non-padding image/sentence representations
@@ -461,9 +358,8 @@ def main():
     # so we will stack them into new tensors ...
     # text_enc has shape (total number of sent in batch, dim)
     # img_enc has shape (total number of image in batch, dim)
-    text_enc = keras.layers.Lambda(mask_slice_and_stack)([extracted_text_features, text_n_inp])
-    img_enc = keras.layers.Lambda(mask_slice_and_stack)([extracted_img_features, img_n_inp])
-
+    text_enc = mask_slice_and_stack([extracted_text_features, text_n_inp])
+    img_enc = mask_slice_and_stack([extracted_img_features, img_n_inp])
 
     def DC_sim(sim_matrix):
         text2im_S = tf.reduce_mean(tf.reduce_max(sim_matrix, 1))
@@ -488,7 +384,7 @@ def main():
     bipartite_match_fn = bipartite_utils.generate_fast_hungarian_solving_function()
     def AP_sim(sim_matrix):
         k = get_k(sim_matrix)
-        sol = tf.py_func(bipartite_match_fn, [sim_matrix, k], tf.int32)
+        sol = tf.numpy_function(bipartite_match_fn, [sim_matrix, k], tf.int32)
         return tf.reduce_mean(tf.gather_nd(sim_matrix, sol))
 
     if args.sim_mode == 'DC':
@@ -500,69 +396,25 @@ def main():
     else:
         raise NotImplementedError('{} is not implemented sim function'.format(args.sim_fn))
 
-    def get_pos_neg_sims(inp):
-        '''
-        Applies the similarity function between all text_idx, img_idx pairs.
-
-        inp is a list of three arguments:
-           - sims: the stacked similarity matrix
-           - text_n_inp: how many sentences are in each document
-           - img_n_inp: how many images are in each document
-        '''
-
-        sims, text_n_inp, img_n_inp = inp
-        text_index_borders = tf.dtypes.cast(tf.cumsum(text_n_inp), tf.int32)
-        img_index_borders = tf.dtypes.cast(tf.cumsum(img_n_inp), tf.int32)
-        zero = tf.expand_dims(tf.expand_dims(tf.constant(0, dtype=tf.int32), axis=-1), axis=-1)
-
-        # these give the indices of the borders between documents in our big sim matrix...
-        text_index_borders = tf.concat([zero, text_index_borders], axis=0)
-        img_index_borders = tf.concat([zero, img_index_borders], axis=0)
-
-        doc2pos_sim = {}
-        doc2neg_img_sims = collections.defaultdict(list)
-        doc2neg_text_sims = collections.defaultdict(list)
-
-        # for each pair of text set and image set...
-        for text_idx in range(args.docs_per_batch):
-            for img_idx in range(args.docs_per_batch):
-                text_start = tf.squeeze(text_index_borders[text_idx])
-                text_end = tf.squeeze(text_index_borders[text_idx+1])
-                img_start = tf.squeeze(img_index_borders[img_idx])
-                img_end = tf.squeeze(img_index_borders[img_idx+1])
-                cur_sims = sims[text_start:text_end, img_start:img_end]
-                sim = sim_fn(cur_sims)
-                if text_idx == img_idx: # positive cases
-                    doc2pos_sim[text_idx] = sim
-                else: # negative cases
-                    doc2neg_img_sims[text_idx].append(sim)
-                    doc2neg_text_sims[img_idx].append(sim)
-
-        pos_sims, neg_img_sims, neg_text_sims = [], [], []
-        for idx in range(args.docs_per_batch):
-            pos_sims.append(doc2pos_sim[idx])
-            neg_img_sims.append(tf.stack(doc2neg_img_sims[idx]))
-            neg_text_sims.append(tf.stack(doc2neg_text_sims[idx]))
-
-        pos_sims = tf.expand_dims(tf.stack(pos_sims), -1)
-        neg_img_sims = tf.stack(neg_img_sims)
-        neg_text_sims = tf.stack(neg_text_sims)
-        return [pos_sims, neg_img_sims, neg_text_sims]
-
     def make_sims(inp):
-        sims = K.dot(inp[0], K.transpose(inp[1]))
+        # CHECK ME --- tf.transpose
+        sims = tf.keras.backend.dot(inp[0], tf.transpose(inp[1]))
         return sims
 
-    all_sims = keras.layers.Lambda(make_sims)([text_enc, img_enc])
-    pos_sims, neg_img_sims, neg_text_sims = keras.layers.Lambda(
+    all_sims = make_sims([text_enc, img_enc])
+    get_pos_neg_sims = model_utils.make_get_pos_neg_sims(
+        args,
+        sim_fn)
+    
+    pos_sims, neg_img_sims, neg_text_sims = tf.keras.layers.Lambda(
         get_pos_neg_sims)([all_sims, text_n_inp, img_n_inp])
 
     def margin_output(inp):
         pos_s, neg_s = inp
-        return K.maximum(neg_s - pos_s + args.margin, 0)
+        return tf.math.maximum(neg_s - pos_s + args.margin, 0)
 
-    neg_img_hinge = keras.layers.Lambda(margin_output)([pos_sims, neg_img_sims])
-    neg_text_hinge = keras.layers.Lambda(margin_output)([pos_sims, neg_text_sims])
+    neg_img_hinge = margin_output([pos_sims, neg_img_sims])
+    neg_text_hinge = margin_output([pos_sims, neg_text_sims])
 
     if args.neg_mining == 'negative_sample':
         pool_fn = lambda x: tf.reduce_mean(x, axis=1, keepdims=True)
@@ -571,130 +423,96 @@ def main():
     else:
         raise NotImplementedError('{} is not a valid for args.neg_mining'.format(args.neg_mining))
 
-    if args.val_loss_mean_neg_sample and args.neg_mining != 'negative_sample':
-        pool_fn_tmp = pool_fn
-        # at train time, do hard negative mining. Val time, do top-5 negative mining.
-        pool_fn = lambda x: K.in_train_phase(
-            pool_fn_tmp(x),
-            tf.reduce_mean(tf.math.top_k(x, k=5)[0], axis=1, keepdims=True))
-
-    neg_img_loss = keras.layers.Lambda(pool_fn, name='neg_img')(neg_img_hinge)
-    neg_text_loss = keras.layers.Lambda(pool_fn, name='neg_text')(neg_text_hinge)
+    neg_img_loss = tf.keras.layers.Lambda(pool_fn, name='neg_img')(neg_img_hinge)
+    neg_text_loss = tf.keras.layers.Lambda(pool_fn, name='neg_text')(neg_text_hinge)
 
     inputs = [text_inp,
               img_inp,
               text_n_inp,
               img_n_inp]
 
-    model = keras.models.Model(inputs=inputs,
-                               outputs=[neg_img_loss, neg_text_loss])
-    model.summary()
+    model = tf.keras.models.Model(inputs=inputs,
+                                  outputs=[neg_img_loss, neg_text_loss])
 
-    opt = keras.optimizers.Adam(args.lr)
+    opt = tf.keras.optimizers.Adam(args.lr)
 
     def identity(y_true, y_pred):
         del y_true
-        return K.mean(y_pred, axis=-1)
+        # CHECK
+        return tf.reduce_mean(y_pred, axis=-1)
 
     model.compile(opt, loss=identity)
 
-    train_gen = training_data_generator(train,
-                                        image_features,
-                                        image_idx2row,
-                                        max_n_sentence,
-                                        max_n_image,
-                                        word2idx,
-                                        args.seq_len,
-                                        args=args,
-                                        docs_per_batch=args.docs_per_batch,
-                                        shuffle_docs=True,
-                                        shuffle_sentences=False,
-                                        shuffle_images=True,
-                                        force_exact_batch=True)
+    if args.test_eval > 0:
+        train = train[:args.test_eval * args.docs_per_batch]
+        val = val[:args.test_eval * args.docs_per_batch]
+        
+    train_seq = training_utils.DocumentSequence(
+        train,
+        image_features,
+        image_idx2row,
+        max_n_sentence,
+        max_n_image,
+        word2idx,
+        args=args,
+        shuffle_docs=True,
+        shuffle_sentences=False,
+        shuffle_images=True)
 
     # pad val with repeated data so that batch sizes are consistent
     n_to_add = args.docs_per_batch - len(val) % args.docs_per_batch
     if n_to_add != args.docs_per_batch:
-        print('Padding iterator validation data with {} data points so batch sizes are consistent...'.format(n_to_add))
         padded_val = val + val[:n_to_add]
         assert not len(padded_val) % args.docs_per_batch
     else:
         padded_val = val
 
-    val_gen = training_data_generator(padded_val,
-                                      image_features,
-                                      image_idx2row,
-                                      max_n_sentence,
-                                      max_n_image,
-                                      word2idx,
-                                      args.seq_len,
-                                      args=args,
-                                      docs_per_batch=args.docs_per_batch,
-                                      augment=False,
-                                      shuffle_sentences=False,
-                                      shuffle_docs=False,
-                                      shuffle_images=False,
-                                      force_exact_batch=True)
+    val_seq = training_utils.DocumentSequence(
+        padded_val,
+        image_features,
+        image_idx2row,
+        max_n_sentence,
+        max_n_image,
+        word2idx,
+        args=args,
+        augment=False,
+        shuffle_sentences=False,
+        shuffle_docs=False,
+        shuffle_images=False)
 
-    class SaveDocModels(keras.callbacks.Callback):
-        def on_train_begin(self, logs={}):
-            self.best_val_loss = np.inf
-            self.best_checkpoints_and_logs = None
-
-        def on_epoch_end(self, epoch, logs):
-            if logs['val_loss'] < self.best_val_loss:
-                print('New best val loss: {:.5f}'.format(logs['val_loss']))
-                self.best_val_loss = logs['val_loss']
-            else:
-                return
-            image_model_str = args.checkpoint_dir + '/image_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
-            sentence_model_str = args.checkpoint_dir + '/text_model_epoch_{}_val={:.5f}.model'.format(epoch, logs['val_loss'])
-            self.best_checkpoints_and_logs = (image_model_str, sentence_model_str, logs, epoch)
-            single_img_doc_model.save(image_model_str, overwrite=True)
-            single_text_doc_model.save(sentence_model_str, overwrite=True)
-
-    sdm = SaveDocModels()
-    callbacks = [keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
-                                                   factor=args.lr_decay,
-                                                   patience=args.lr_patience,
-                                                   min_lr=args.min_lr,
-                                                   verbose=True), sdm]
-
-    class PrintMetrics(keras.callbacks.Callback):
-        def on_train_begin(self, logs=None):
-            self.epoch = []
-            self.history = {}
-
-        def on_epoch_end(self, epoch, logs):
-            metrics = eval_utils.print_all_metrics(val,
-                                                   image_features,
-                                                   image_idx2row,
-                                                   word2idx,
-                                                   single_text_doc_model,
-                                                   single_img_doc_model,
-                                                   args)
-            self.epoch.append(epoch)
-            for k, v in metrics.items():
-                self.history.setdefault(k, []).append(v)
+    sdm = training_utils.SaveDocModels(
+        args.checkpoint_dir,
+        single_text_doc_model,
+        single_img_doc_model)
+    
+    callbacks = [tf.keras.callbacks.ReduceLROnPlateau(factor=args.lr_decay,
+                                                      patience=args.lr_patience,
+                                                      min_lr=args.min_lr,
+                                                      verbose=True), sdm]
 
 
     if args.print_metrics:
-        metrics_printer = PrintMetrics()
+        metrics_printer = training_utils.PrintMetrics(
+            val,
+            image_features,
+            image_idx2row,
+            word2idx,
+            single_text_doc_model,
+            single_img_doc_model,
+            args)
         callbacks.append(metrics_printer)
-
-    history = model.fit_generator(
-        train_gen,
-        steps_per_epoch=(len(train) // args.docs_per_batch + (0 if len(train) % args.docs_per_batch == 0 else 1)) if args.test_eval <= 0 else args.test_eval,
+        
+    history = model.fit(
+        train_seq,
         epochs=args.n_epochs,
-        validation_data=val_gen,
-        validation_steps=len(val) // args.docs_per_batch if args.test_eval <= 0 else args.test_eval,
-        callbacks=callbacks)
+        validation_data=val_seq,
+        callbacks=callbacks,
+        shuffle=False)
 
     if args.output:
         best_image_model_str, best_sentence_model_str, best_logs, best_epoch = sdm.best_checkpoints_and_logs
-
-        single_text_doc_model = keras.models.load_model(best_sentence_model_str)
-        single_image_doc_model = keras.models.load_model(best_image_model_str)
+        single_text_doc_model = tf.keras.models.load_model(best_sentence_model_str)
+        single_image_doc_model = tf.keras.models.load_model(best_image_model_str)
 
         if ground_truth:
             val_aucs, val_match_metrics = eval_utils.compute_match_metrics_doc(
@@ -733,7 +551,6 @@ def main():
         if args.print_metrics:
             for k, v in metrics_printer.history.items():
                 output['metrics_history_{}'.format(k)] = v
-
 
         with open(args.output, 'wb') as f:
             pickle.dump(output, f, protocol=pickle.HIGHEST_PROTOCOL)
