@@ -261,16 +261,16 @@ def main():
     # (n docs, n sent, max n words,)
     # see the comment in text_utils.text_to_matrix re: args.seq_len+1.
     # all sequences are pre-pended with a padding token.
-    text_inp = tf.keras.layers.Input((max_n_sentence, args.seq_len+1))
+    text_inp = tf.keras.layers.Input((None, args.seq_len+1))
 
     # this input tells you how many sentences are really in each doc
     text_n_inp = tf.keras.layers.Input((1,), dtype='int32')
     if args.end2end:
         # (n docs, n image, x, y, color)
-        img_inp = tf.keras.layers.Input((max_n_image, 224, 224, 3))
+        img_inp = tf.keras.layers.Input((None, 224, 224, 3))
     else:
         # (n docs, n image, feature dim)
-        img_inp = tf.keras.layers.Input((max_n_image, image_features.shape[1]))
+        img_inp = tf.keras.layers.Input((None, image_features.shape[1]))
     # this input tells you how many images are really in each doc
     img_n_inp = tf.keras.layers.Input((1,), dtype='int32')
 
