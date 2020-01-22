@@ -303,7 +303,6 @@ def main():
         extracted_img_features = keras.layers.TimeDistributed(img_projection)(
             extracted_img_features)
     else:
-        img_projection = tf.keras.layers.Dense(args.joint_emb_dim)
         extracted_img_features = tf.keras.layers.Masking()(img_inp)
         if args.dropout > 0.0:
             extracted_img_features = tf.keras.layers.TimeDistributed(
@@ -315,8 +314,11 @@ def main():
 
     # Step 3: L2 normalize each extracted feature vectors to finish, and
     # define the models that can be run at test-time.
-    extracted_text_features = tf.math.l2_normalize(extracted_text_features, axis=-1)
-    extracted_img_features = tf.math.l2_normalize(extracted_img_features, axis=-1)
+
+    l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=-1))
+    
+    extracted_text_features = l2_norm_layer(extracted_text_features)
+    extracted_img_features = l2_norm_layer(extracted_img_features)
     single_text_doc_model = tf.keras.models.Model(
         inputs=text_inp,
         outputs=extracted_text_features)
