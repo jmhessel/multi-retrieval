@@ -66,17 +66,20 @@ def text_to_matrix(captions, vocab, max_len=15, padding='pre'):
     seqs = []
     for c in captions:
         tokens = preprocess_caption(c).split()
+
         # for reasons I dont understand, the new version of CUDNN
-        # doesn't play nice with timedistributed RNN, padding, etc.
-        # After painstakingly narrowing down why this happens, CUDNN
-        # errors when: 1) you're using timedistributed RNN 2) all
-        # non-padding sequences it is to iterate over have NO padding
-        # tokens my current solution to this problem is to just add a
-        # padding token to the start of each sequence. I will revisit
-        # this later as newer versions of CUDNN and TF2 come out.  the
-        # oddest thing is: CUDNN seems to play nice if you have fully
-        # pad sequences in the batch, so long as SOME non-padding
-        # sequence has a pad.
+        # doesn't play nice with padding, etc.  After painstakingly
+        # narrowing down why this happens, CUDNN errors when:
+        
+        # 1) you're using RNN
+        # 2) your batch consists of fully-padded sequences and non-padded sequences only
+
+        # I filed a tensorflow issue:
+        # see https://github.com/tensorflow/tensorflow/issues/36139
+
+        # To solve this, for now, I'm just adding a padding char to all sequences.
+        # This padding token can be removed in the future when this issue is fixed.
+        
         idxs = [vocab['<PAD>']] + [vocab[v] if v in vocab else vocab['<UNK>'] for v in tokens]
         seqs.append(idxs)
     m_mat = tf.keras.preprocessing.sequence.pad_sequences(seqs, maxlen=max_len+1,
