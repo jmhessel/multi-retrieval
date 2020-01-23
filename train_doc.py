@@ -470,7 +470,7 @@ def main():
         shuffle_images=True)
 
     val_seq = training_utils.DocumentSequence(
-        padded_val,
+        val,
         image_features,
         image_idx2row,
         max_n_sentence,
