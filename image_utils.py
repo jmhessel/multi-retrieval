@@ -1,6 +1,7 @@
 import numpy as np
-from keras.preprocessing import image
-from keras.applications.nasnet import preprocess_input
+import tensorflow as tf
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications.nasnet import preprocess_input
 import scipy.misc
 
 data_augmentor = image.ImageDataGenerator(rotation_range=20,

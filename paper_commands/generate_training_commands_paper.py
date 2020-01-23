@@ -15,11 +15,11 @@ n_parallel = 4
 
 all_commands = []
 
-for batch_size in [11,21,31]:
-    for dset in ['dii', 'diy', 'mscoco', 'rqa', 'sis', 'dii-r', 'wiki']:
-        for alg in ['DC','TK','AP','NoStruct']:
-            for k in [-1] if alg in ['DC', 'NoStruct'] else [-1, 2]:
-                for neg_mining in ['negative_sample', 'hard_negative']:
+for batch_size in [11]:#21,31]:
+    for dset in ['rqa']:# 'diy', 'mscoco', 'rqa', 'sis', 'dii-r', 'wiki']:
+        for alg in ['AP']:#'DC','TK','AP','NoStruct']:
+            for k in [-1]:# if alg in ['DC', 'NoStruct'] else [-1, 2]:
+                for neg_mining in ['hard_negative']:
 
                     # for wiki, just do limited settings
                     if dset == 'wiki' and (alg not in ['AP', 'NoStruct'] or k != -1 or neg_mining != 'hard_negative' or batch_size != 11): continue
