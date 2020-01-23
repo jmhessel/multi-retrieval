@@ -40,7 +40,7 @@ def make_get_pos_neg_sims(args, sim_fn):
                 img_end = tf.squeeze(img_index_borders[img_idx+1])
                 cur_sims = sims[text_start:text_end, img_start:img_end]
                 sim = sim_fn(cur_sims)
-                if text_idx == img_idx: # positive cases
+                if text_idx == img_idx:
                     doc2pos_sim[text_idx] = sim
                 else: # negative cases
                     doc2neg_img_sims[text_idx].append(sim)
@@ -55,6 +55,7 @@ def make_get_pos_neg_sims(args, sim_fn):
         pos_sims = tf.expand_dims(tf.stack(pos_sims), -1)
         neg_img_sims = tf.stack(neg_img_sims)
         neg_text_sims = tf.stack(neg_text_sims)
+
         return [pos_sims, neg_img_sims, neg_text_sims]
 
     return get_pos_neg_sims

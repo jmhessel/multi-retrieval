@@ -47,7 +47,7 @@ def compute_match_metrics_doc(docs,
 
         text_vec = text_vec[0,:n_text,:]
         image_vec = image_vec[0,:n_image,:]
-
+        
         pred_adj = text_vec.dot(image_vec.transpose())
         true_adj = np.zeros((len(text), len(images)))
 

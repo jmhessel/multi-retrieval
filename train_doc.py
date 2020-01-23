@@ -283,7 +283,6 @@ def main():
             args.text_model_checkpoint))
         single_text_doc_model = tf.keras.models.load_model(args.text_model_checkpoint)
         extracted_text_features = single_text_doc_model(text_inp)
-        single_text_doc_model.summary()
     else:
         word_embedding = tf.keras.layers.Embedding(
             len(word2idx),
@@ -313,7 +312,6 @@ def main():
         single_text_doc_model = tf.keras.models.Model(
             inputs=text_inp,
             outputs=extracted_text_features)
-        single_text_doc_model.summary()
         
     # Step 2.2: The image model:
     if args.image_model_checkpoint:
@@ -471,14 +469,6 @@ def main():
         shuffle_sentences=False,
         shuffle_images=True)
 
-    # pad val with repeated data so that batch sizes are consistent
-    n_to_add = args.docs_per_batch - len(val) % args.docs_per_batch
-    if n_to_add != args.docs_per_batch:
-        padded_val = val + val[:n_to_add]
-        assert not len(padded_val) % args.docs_per_batch
-    else:
-        padded_val = val
-
     val_seq = training_utils.DocumentSequence(
         padded_val,
         image_features,
@@ -518,8 +508,7 @@ def main():
         train_seq,
         epochs=args.n_epochs,
         validation_data=val_seq,
-        callbacks=callbacks,
-        shuffle=False)
+        callbacks=callbacks)
 
     if args.output:
         best_image_model_str, best_sentence_model_str, best_logs, best_epoch = sdm.best_checkpoints_and_logs
