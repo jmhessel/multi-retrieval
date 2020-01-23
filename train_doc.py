@@ -284,8 +284,6 @@ def main():
         single_text_doc_model = tf.keras.models.load_model(args.text_model_checkpoint)
         extracted_text_features = single_text_doc_model(text_inp)
         single_text_doc_model.summary()
-        pprint(single_text_doc_model.layers[2].layer.get_config())
-        quit()
     else:
         word_embedding = tf.keras.layers.Embedding(
             len(word2idx),
