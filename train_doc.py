@@ -217,6 +217,7 @@ def main():
 
     data = load_data(args.documents)
     train, val, test = data['train'], data['val'], data['test']
+    
     np.random.shuffle(train); np.random.shuffle(val); np.random.shuffle(test)
     max_n_sentence, max_n_image = -1, -1
     for d in train + val + test:
@@ -277,67 +278,80 @@ def main():
     # Step 2: Define transformations to shared multimodal space.
 
     # Step 2.1: The text model:
-    word_embedding = tf.keras.layers.Embedding(len(word2idx),
-                                               word_emb_dim,
-                                               weights=[we_init] if we_init is not None else None,
-                                               mask_zero=True)
-    if args.rnn_type == 'GRU':
-        word_rnn = tf.keras.layers.GRU(args.joint_emb_dim, recurrent_dropout=args.dropout)
-    else:
-        word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim, recurrent_dropout=args.dropout)
-    embedded_text_inp = word_embedding(text_inp)
-    extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
-    # extracted_text_features is now (n docs, max n setnences, multimodal dim)
-
-    # Step 2.2: The image model:
-    img_projection = tf.keras.layers.Dense(args.joint_emb_dim)
-    if args.end2end:
-        from tf.keras.applications.nasnet import NASNetMobile
-        cnn = tf.keras.applications.nasnet.NASNetMobile(
-            include_top=False, input_shape=(224, 224, 3), pooling='avg')
-
-        extracted_img_features = tf.keras.layers.TimeDistributed(cnn)(img_inp)
-        if args.dropout > 0.0:
-            extracted_img_features = tf.keras.layers.TimeDistributed(
-                tf.keras.layers.Dropout(args.dropout))(extracted_img_features)
-        extracted_img_features = keras.layers.TimeDistributed(img_projection)(
-            extracted_img_features)
-    else:
-        extracted_img_features = tf.keras.layers.Masking()(img_inp)
-        if args.dropout > 0.0:
-            extracted_img_features = tf.keras.layers.TimeDistributed(
-                tf.keras.layers.Dropout(args.dropout))(extracted_img_features)
-        extracted_img_features = tf.keras.layers.TimeDistributed(
-            img_projection)(extracted_img_features)
-
-    # extracted_img_features is now (n docs, max n images, multimodal dim)
-
-    # Step 3: L2 normalize each extracted feature vectors to finish, and
-    # define the models that can be run at test-time.
-
-    l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=-1))
-    
-    extracted_text_features = l2_norm_layer(extracted_text_features)
-    extracted_img_features = l2_norm_layer(extracted_img_features)
-    single_text_doc_model = tf.keras.models.Model(
-        inputs=text_inp,
-        outputs=extracted_text_features)
-    single_img_doc_model = tf.keras.models.Model(
-        inputs=img_inp,
-        outputs=extracted_img_features)
-
     if args.text_model_checkpoint:
         print('Loading pretrained text model from {}'.format(
             args.text_model_checkpoint))
         single_text_doc_model = tf.keras.models.load_model(args.text_model_checkpoint)
-
+        extracted_text_features = single_text_doc_model(text_inp)
+        single_text_doc_model.summary()
+        pprint(single_text_doc_model.layers[2].layer.get_config())
+        quit()
+    else:
+        word_embedding = tf.keras.layers.Embedding(
+            len(word2idx),
+            word_emb_dim,
+            weights=[we_init] if we_init is not None else None,
+            mask_zero=True)
+        if args.rnn_type == 'GRU':
+            # the default settings for the GRU have changed since the
+            # paper. For reproducability, this is my best attempt to
+            # reconstruct them based on examination of saved
+            # checkpoints.
+            word_rnn = tf.keras.layers.GRU(
+                args.joint_emb_dim,
+                recurrent_dropout=args.dropout,
+                kernel_initializer=tf.keras.initializers.VarianceScaling(
+                    mode='fan_avg',
+                    distribution='uniform'),
+                recurrent_activation='hard_sigmoid',
+                reset_after=False)
+        else:
+            word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim, recurrent_dropout=args.dropout)
+        embedded_text_inp = word_embedding(text_inp)
+        extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
+        # extracted_text_features is now (n docs, max n setnences, multimodal dim)
+        l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
+        extracted_text_features = l2_norm_layer(extracted_text_features)
+        single_text_doc_model = tf.keras.models.Model(
+            inputs=text_inp,
+            outputs=extracted_text_features)
+        single_text_doc_model.summary()
+        
+    # Step 2.2: The image model:
     if args.image_model_checkpoint:
         print('Loading pretrained image model from {}'.format(
             args.image_model_checkpoint))
         single_img_doc_model = tf.keras.models.load_model(args.image_model_checkpoint)
+        extracted_img_features = single_img_doc_model(img_inp)
+    else:
+        img_projection = tf.keras.layers.Dense(args.joint_emb_dim)
+        if args.end2end:
+            from tf.keras.applications.nasnet import NASNetMobile
+            cnn = tf.keras.applications.nasnet.NASNetMobile(
+                include_top=False, input_shape=(224, 224, 3), pooling='avg')
 
+            extracted_img_features = tf.keras.layers.TimeDistributed(cnn)(img_inp)
+            if args.dropout > 0.0:
+                extracted_img_features = tf.keras.layers.TimeDistributed(
+                    tf.keras.layers.Dropout(args.dropout))(extracted_img_features)
+            extracted_img_features = keras.layers.TimeDistributed(img_projection)(
+                extracted_img_features)
+        else:
+            extracted_img_features = tf.keras.layers.Masking()(img_inp)
+            if args.dropout > 0.0:
+                extracted_img_features = tf.keras.layers.TimeDistributed(
+                    tf.keras.layers.Dropout(args.dropout))(extracted_img_features)
+            extracted_img_features = tf.keras.layers.TimeDistributed(
+                img_projection)(extracted_img_features)
 
-    # Step 4: Extract/stack the non-padding image/sentence representations
+        # extracted_img_features is now (n docs, max n images, multimodal dim)
+        l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
+        extracted_img_features = l2_norm_layer(extracted_img_features)
+        single_img_doc_model = tf.keras.models.Model(
+            inputs=img_inp,
+            outputs=extracted_img_features)
+
+    # Step 3: Extract/stack the non-padding image/sentence representations
     def mask_slice_and_stack(inp):
         stacker = []
         features, n_inputs = inp
@@ -398,7 +412,7 @@ def main():
 
     def make_sims(inp):
         # CHECK ME --- tf.transpose
-        sims = tf.keras.backend.dot(inp[0], tf.transpose(inp[1]))
+        sims = tf.keras.backend.dot(inp[0], tf.keras.backend.transpose(inp[1]))
         return sims
 
     all_sims = make_sims([text_enc, img_enc])
