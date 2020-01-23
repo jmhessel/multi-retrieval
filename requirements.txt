@@ -1,7 +1,7 @@
 lapjv
 numpy
 scipy
-sklearn
+scikit-learn
 tqdm
 spacy
 gensim
