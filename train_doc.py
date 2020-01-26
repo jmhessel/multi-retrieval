@@ -71,7 +71,7 @@ def parse_args():
     parser.add_argument('--lr',
                         type=float,
                         help='Starting learning rate',
-                        default=.0001)
+                        default=.00005)
     parser.add_argument('--n_epochs',
                         type=int,
                         help='How many epochs to run for?',
@@ -110,7 +110,7 @@ def parse_args():
                         default=1)
     parser.add_argument('--dropout',
                         type=float,
-                        default=0.4,
+                        default=0.5,
                         help='How much dropout should we apply?')
     parser.add_argument('--subsample_image',
                         type=int,
@@ -146,7 +146,7 @@ def parse_args():
                         help='What learning rate decay factor should we use?')
     parser.add_argument('--min_lr',
                         type=float,
-                        default=.0000001,
+                        default=.00000001,
                         help='What learning rate decay factor should we use?')
     parser.add_argument('--full_image_paths',
                         type=int,
@@ -289,22 +289,13 @@ def main():
             word_emb_dim,
             weights=[we_init] if we_init is not None else None,
             mask_zero=True)
+        word_emb_dropout = tf.keras.layers.Dropout(args.dropout)
         if args.rnn_type == 'GRU':
-            # the default settings for the GRU have changed since the
-            # paper. For reproducability, this is my best attempt to
-            # reconstruct them based on examination of saved
-            # checkpoints.
-            word_rnn = tf.keras.layers.GRU(
-                args.joint_emb_dim,
-                recurrent_dropout=args.dropout,
-                kernel_initializer=tf.keras.initializers.VarianceScaling(
-                    mode='fan_avg',
-                    distribution='uniform'),
-                recurrent_activation='hard_sigmoid',
-                reset_after=False)
+            word_rnn = tf.keras.layers.GRU(args.joint_emb_dim)
         else:
-            word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim, recurrent_dropout=args.dropout)
+            word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim)
         embedded_text_inp = word_embedding(text_inp)
+        embedded_text_inp = word_emb_dropout(embedded_text_inp)
         extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
         # extracted_text_features is now (n docs, max n setnences, multimodal dim)
         l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
