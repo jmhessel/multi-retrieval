@@ -62,7 +62,7 @@ def get_word2vec_matrix(vocab, cache_file, word2vec_binary):
     return m_matrix
 
 
-def text_to_matrix(captions, vocab, max_len=15, padding='pre'):
+def text_to_matrix(captions, vocab, max_len=15, padding='post'):
     seqs = []
     for c in captions:
         tokens = preprocess_caption(c).split()
@@ -79,10 +79,10 @@ def text_to_matrix(captions, vocab, max_len=15, padding='pre'):
 
         # To solve this, for now, I'm just adding a padding char to all sequences.
         # This padding token can be removed in the future when this issue is fixed.
-        
-        idxs = [vocab['<PAD>']] + [vocab[v] if v in vocab else vocab['<UNK>'] for v in tokens]
+        idxs = [vocab[v] if v in vocab else vocab['<UNK>'] for v in tokens]
         seqs.append(idxs)
-    m_mat = tf.keras.preprocessing.sequence.pad_sequences(seqs, maxlen=max_len+1,
+    m_mat = tf.keras.preprocessing.sequence.pad_sequences(seqs, maxlen=max_len,
                                                           padding=padding, truncating='post',
                                                           value=0)
+    m_mat = np.hstack([m_mat, np.zeros((len(m_mat), 1))])
     return m_mat
