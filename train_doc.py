@@ -289,11 +289,7 @@ def main():
             mask_zero=True)
         element_dropout = tf.keras.layers.SpatialDropout1D(args.dropout)
         if args.rnn_type == 'GRU':
-            word_rnn = tf.keras.layers.GRU(
-                args.joint_emb_dim,
-                kernel_initializater=tf.keras.initializers.VarianceScaling(
-                    mode='fan_avg',
-                    distribution='uniform'))
+            word_rnn = tf.keras.layers.GRU(args.joint_emb_dim)
         else:
             word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim)
         embedded_text_inp = word_embedding(text_inp)
