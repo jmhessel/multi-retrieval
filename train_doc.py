@@ -287,6 +287,7 @@ def main():
             word_emb_dim,
             weights=[we_init] if we_init is not None else None,
             mask_zero=True)
+        element_dropout = tf.keras.layers.SpatialDropout1D(args.dropout)
         if args.rnn_type == 'GRU':
             word_rnn = tf.keras.layers.GRU(
                 args.joint_emb_dim,
@@ -296,6 +297,7 @@ def main():
         else:
             word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim)
         embedded_text_inp = word_embedding(text_inp)
+        embedded_text_inp = tf.keras.layers.TimeDistributed(element_dropout)(embedded_text_inp)
         extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
         # extracted_text_features is now (n docs, max n setnences, multimodal dim)
         l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
