@@ -90,7 +90,11 @@ class DocumentSequence(tf.keras.utils.Sequence):
             else:
                 text_padding = np.zeros(
                     (self.max_sentences_per_doc - cur_text.shape[0], cur_text.shape[-1]))
-                
+
+            # cudnn cant do empty sequences, so for now, I will just put an UNK in front of all sequences.
+            # see comment in text_utils.py for more information.
+            text_padding[:, 0] = 1
+
             cur_images = np.vstack([cur_images, image_padding])
             cur_text = np.vstack([cur_text, text_padding])
 
@@ -102,7 +106,7 @@ class DocumentSequence(tf.keras.utils.Sequence):
 
         images = np.vstack(images)
         texts = np.vstack(texts)
-        
+
         image_n_docs = np.expand_dims(np.array(image_n_docs), -1)
         text_n_docs = np.expand_dims(np.array(text_n_docs), -1)
 

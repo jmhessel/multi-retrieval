@@ -77,12 +77,18 @@ def text_to_matrix(captions, vocab, max_len=15, padding='post'):
         # I filed a tensorflow issue:
         # see https://github.com/tensorflow/tensorflow/issues/36139
 
-        # To solve this, for now, I'm just adding a padding char to all sequences.
-        # This padding token can be removed in the future when this issue is fixed.
+        # Upon a tensorflower's reply, CuDNN currently doesn't like empty sequences,
+        # and the CuDNN kernel only gets called when things are right-padded
+        
+        # so, for now, until this bug is fixed, so we can still use CuDNN:
+        # 1) we will right/post-pad
+        # 2) in the data iterator, for padding sequences, we will prepend with
+        #    an unk. These sentences don't affect the gradient, and we are
+        #    expecting CuDNN to return junk anyway in those cases, so this
+        #    should be fine, but I will experimentally verify
         idxs = [vocab[v] if v in vocab else vocab['<UNK>'] for v in tokens]
         seqs.append(idxs)
     m_mat = tf.keras.preprocessing.sequence.pad_sequences(seqs, maxlen=max_len,
                                                           padding=padding, truncating='post',
                                                           value=0)
-    m_mat = np.hstack([m_mat, np.zeros((len(m_mat), 1))])
     return m_mat

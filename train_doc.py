@@ -260,9 +260,7 @@ def main():
     # Step 1: Specify model inputs/outputs:
 
     # (n docs, n sent, max n words,)
-    # see the comment in text_utils.text_to_matrix re: args.seq_len+1.
-    # all sequences are pre-pended with a padding token.
-    text_inp = tf.keras.layers.Input((None, args.seq_len+1))
+    text_inp = tf.keras.layers.Input((None, args.seq_len))
 
     # this input tells you how many sentences are really in each doc
     text_n_inp = tf.keras.layers.Input((1,), dtype='int32')
@@ -289,13 +287,15 @@ def main():
             word_emb_dim,
             weights=[we_init] if we_init is not None else None,
             mask_zero=True)
-        word_emb_dropout = tf.keras.layers.Dropout(args.dropout)
         if args.rnn_type == 'GRU':
-            word_rnn = tf.keras.layers.GRU(args.joint_emb_dim)
+            word_rnn = tf.keras.layers.GRU(
+                args.joint_emb_dim,
+                kernel_initializater=tf.keras.initializers.VarianceScaling(
+                    mode='fan_avg',
+                    distribution='uniform'))
         else:
             word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim)
         embedded_text_inp = word_embedding(text_inp)
-        embedded_text_inp = word_emb_dropout(embedded_text_inp)
         extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
         # extracted_text_features is now (n docs, max n setnences, multimodal dim)
         l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
