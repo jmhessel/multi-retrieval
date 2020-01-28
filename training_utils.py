@@ -154,18 +154,32 @@ class SaveDocModels(tf.keras.callbacks.Callback):
 
 
 
-class ReduceLROnPlateauAfterEpochs(tf.keras.callbacks.ReduceLROnPlateau):
+class ReduceLROnPlateauAfterValLoss(tf.keras.callbacks.ReduceLROnPlateau):
     '''
-    Delays the normal operation of ReduceLROnPlateau by a given number of epochs.
+    Delays the normal operation of ReduceLROnPlateau until the validation
+    loss reaches a given value.
     '''
-    def __init__(self, after_epochs=0, *args, **kwargs):
-        self.after_epochs = after_epochs
-        super(ReduceLROnPlateauAfterEpochs, self).__init__(*args, **kwargs)
+    def __init__(self, activation_val_loss=np.inf, *args, **kwargs):
+        super(ReduceLROnPlateauAfterValLoss, self).__init__(*args, **kwargs)
+        self.activation_val_loss = activation_val_loss
+        self.val_threshold_activated = False
         
-    def _reset(self):
-        super(ReduceLROnPlateauAfterEpochs, self)._reset()
-        self.cooldown_counter = self.after_epochs
+    def in_cooldown(self):
+        if not self.val_threshold_activated: # check to see if we should activate
+            if self.current_logs['val_loss'] < self.activation_val_loss:
+                print('Current validation loss ({}) less than activation val loss ({})'.
+                      format(self.current_logs['val_loss'],
+                             self.activation_val_loss))
+                print('Normal operation of val LR reduction started.')
+                self.val_threshold_activated = True
+                self._reset()
+            
+        return self.cooldown_counter > 0 and self.val_threshold_activated
 
+    def on_epoch_end(self, epoch, logs=None):
+        self.current_logs = logs
+        super(ReduceLROnPlateauAfterValLoss, self).on_epoch_end(epoch, logs=logs)
+    
 
 class PrintMetrics(tf.keras.callbacks.Callback):
     def __init__(self,

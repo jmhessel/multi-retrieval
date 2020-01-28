@@ -146,13 +146,8 @@ def parse_args():
                         help='What learning rate decay factor should we use?')
     parser.add_argument('--min_lr',
                         type=float,
-                        default=.00000001,
+                        default=.0000001,
                         help='What learning rate decay factor should we use?')
-    parser.add_argument('--wait_before_decay_epochs',
-                        type=int,
-                        default=30,
-                        help='How many epochs should we wait before activating the '
-                        'learning rate decay on val loss behavior?')
     parser.add_argument('--full_image_paths',
                         type=int,
                         default=0,
@@ -491,8 +486,13 @@ def main():
         single_text_doc_model,
         single_img_doc_model)
 
-    reduce_lr = training_utils.ReduceLROnPlateauAfterEpochs(
-        after_epochs=args.wait_before_decay_epochs,
+    if args.loss_mode == 'hinge':
+        val_loss_thresh = 2 * args.margin # constant prediction performance
+    else:
+        val_loss_thresh = np.inf
+    
+    reduce_lr = training_utils.ReduceLROnPlateauAfterValLoss(
+        activation_val_loss=val_loss_thresh,
         factor=args.lr_decay,
         patience=args.lr_patience,
         min_lr=args.min_lr,
