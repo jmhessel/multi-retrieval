@@ -177,7 +177,11 @@ def parse_args():
                         default=None,
                         help='If set, the text model will be initialized from '
                         'this model checkpoint.')
-
+    parser.add_argument('--loss_mode',
+                        help='What loss function should we use?',
+                        default='hinge',
+                        choices=['hinge', 'logistic'],
+                        type=str)
     args = parser.parse_args()
 
     # check to make sure that various flags are set correctly
@@ -396,7 +400,6 @@ def main():
         raise NotImplementedError('{} is not implemented sim function'.format(args.sim_fn))
 
     def make_sims(inp):
-        # CHECK ME --- tf.transpose
         sims = tf.keras.backend.dot(inp[0], tf.keras.backend.transpose(inp[1]))
         return sims
 
@@ -408,12 +411,19 @@ def main():
     pos_sims, neg_img_sims, neg_text_sims = tf.keras.layers.Lambda(
         get_pos_neg_sims)([all_sims, text_n_inp, img_n_inp])
 
-    def margin_output(inp):
-        pos_s, neg_s = inp
-        return tf.math.maximum(neg_s - pos_s + args.margin, 0)
-
-    neg_img_hinge = margin_output([pos_sims, neg_img_sims])
-    neg_text_hinge = margin_output([pos_sims, neg_text_sims])
+    if args.loss_mode == 'hinge':
+        def per_neg_loss(inp):
+            pos_s, neg_s = inp
+            return tf.math.maximum(neg_s - pos_s + args.margin, 0)
+    else:
+        def per_neg_loss(inp):
+            pos_s, neg_s = inp
+            return tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.ones_like(neg_s),
+                logits=pos_s - neg_s)
+        
+    neg_img_losses = per_neg_loss([pos_sims, neg_img_sims])
+    neg_text_losses = per_neg_loss([pos_sims, neg_text_sims])
 
     if args.neg_mining == 'negative_sample':
         pool_fn = lambda x: tf.reduce_mean(x, axis=1, keepdims=True)
@@ -422,8 +432,8 @@ def main():
     else:
         raise NotImplementedError('{} is not a valid for args.neg_mining'.format(args.neg_mining))
 
-    neg_img_loss = tf.keras.layers.Lambda(pool_fn, name='neg_img')(neg_img_hinge)
-    neg_text_loss = tf.keras.layers.Lambda(pool_fn, name='neg_text')(neg_text_hinge)
+    neg_img_loss = tf.keras.layers.Lambda(pool_fn, name='neg_img')(neg_img_losses)
+    neg_text_loss = tf.keras.layers.Lambda(pool_fn, name='neg_text')(neg_text_losses)
 
     inputs = [text_inp,
               img_inp,
