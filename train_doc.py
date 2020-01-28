@@ -110,7 +110,7 @@ def parse_args():
                         default=1)
     parser.add_argument('--dropout',
                         type=float,
-                        default=0.4,
+                        default=0.5,
                         help='How much dropout should we apply?')
     parser.add_argument('--subsample_image',
                         type=int,
