@@ -71,11 +71,11 @@ def parse_args():
     parser.add_argument('--lr',
                         type=float,
                         help='Starting learning rate',
-                        default=.00005)
+                        default=.0002)
     parser.add_argument('--n_epochs',
                         type=int,
                         help='How many epochs to run for?',
-                        default=50)
+                        default=60)
     parser.add_argument('--checkpoint_dir',
                         type=str,
                         help='What directory to save checkpoints in?',
@@ -110,7 +110,7 @@ def parse_args():
                         default=1)
     parser.add_argument('--dropout',
                         type=float,
-                        default=0.5,
+                        default=0.4,
                         help='How much dropout should we apply?')
     parser.add_argument('--subsample_image',
                         type=int,
@@ -148,6 +148,11 @@ def parse_args():
                         type=float,
                         default=.00000001,
                         help='What learning rate decay factor should we use?')
+    parser.add_argument('--wait_before_decay_epochs',
+                        type=int,
+                        default=30,
+                        help='How many epochs should we wait before activating the '
+                        'learning rate decay on val loss behavior?')
     parser.add_argument('--full_image_paths',
                         type=int,
                         default=0,
@@ -485,11 +490,15 @@ def main():
         args.checkpoint_dir,
         single_text_doc_model,
         single_img_doc_model)
+
+    reduce_lr = training_utils.ReduceLROnPlateauAfterEpochs(
+        after_epochs=args.wait_before_decay_epochs,
+        factor=args.lr_decay,
+        patience=args.lr_patience,
+        min_lr=args.min_lr,
+        verbose=True)
     
-    callbacks = [tf.keras.callbacks.ReduceLROnPlateau(factor=args.lr_decay,
-                                                      patience=args.lr_patience,
-                                                      min_lr=args.min_lr,
-                                                      verbose=True), sdm]
+    callbacks = [reduce_lr, sdm]
 
 
     if args.print_metrics:

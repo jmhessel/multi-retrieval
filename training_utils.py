@@ -153,6 +153,20 @@ class SaveDocModels(tf.keras.callbacks.Callback):
         self.single_image_doc_model.save(image_model_str, overwrite=True, save_format='h5')
 
 
+
+class ReduceLROnPlateauAfterEpochs(tf.keras.callbacks.ReduceLROnPlateau):
+    '''
+    Delays the normal operation of ReduceLROnPlateau by a given number of epochs.
+    '''
+    def __init__(self, after_epochs=0, *args, **kwargs):
+        self.after_epochs = after_epochs
+        super(ReduceLROnPlateauAfterEpochs, self).__init__(*args, **kwargs)
+        
+    def _reset(self):
+        super(ReduceLROnPlateauAfterEpochs, self)._reset()
+        self.cooldown_counter = self.after_epochs
+
+
 class PrintMetrics(tf.keras.callbacks.Callback):
     def __init__(self,
                  val,
