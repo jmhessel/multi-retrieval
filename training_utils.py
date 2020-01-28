@@ -173,8 +173,8 @@ class ReduceLROnPlateauAfterValLoss(tf.keras.callbacks.ReduceLROnPlateau):
                 print('Normal operation of val LR reduction started.')
                 self.val_threshold_activated = True
                 self._reset()
-            
-        return self.cooldown_counter > 0 and self.val_threshold_activated
+        
+        return self.cooldown_counter > 0 or not self.val_threshold_activated
 
     def on_epoch_end(self, epoch, logs=None):
         self.current_logs = logs
