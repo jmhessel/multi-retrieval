@@ -18,7 +18,7 @@ If you find the code, data, or paper useful, please consider citing
 }
 ```
 
-*note: I recently upgraded the implementation of this paper to TF2. If you're interested in the exact code used for the EMNLP paper for reproduction purposes, you should check out the tf1 branch, and run with those requirements.*
+*note: I recently upgraded the implementation of this paper to TF2. If you're interested in the exact code used for the EMNLP paper for reproduction purposes, you should check out the tf1 branch, and run with those requirements. However --- I'd highly reccomend using the tf2 branch. It is much faster, and I've been able to reproduce the paper results with it.*
 
 ## Requirements
 This code requires python3 and several python
