@@ -1,6 +1,15 @@
 import numpy as np
 import tensorflow as tf
 from sklearn.metrics import roc_auc_score
+import sacrebleu
+
+# pycocoevalcap imports
+from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
+from pycocoevalcap.bleu.bleu import Bleu
+from pycocoevalcap.meteor.meteor import Meteor
+from pycocoevalcap.rouge.rouge import Rouge
+from pycocoevalcap.cider.cider import Cider
+
 
 import collections
 import tqdm
@@ -23,6 +32,11 @@ def compute_match_metrics_doc(docs,
     all_aucs, all_match_metrics = [], collections.defaultdict(list)
     all_texts, all_images = [], []
 
+
+    #for MT metrics
+    all_refs = []
+    all_sys = []
+    
     # supress warwning that I believe is thrown by keras' timedistributed
     # over dynamic tensors...
     tf.get_logger().setLevel('ERROR')
@@ -51,13 +65,27 @@ def compute_match_metrics_doc(docs,
         pred_adj = text_vec.dot(image_vec.transpose())
         true_adj = np.zeros((len(text), len(images)))
 
+        # for MT metrics, for each image with a ground-truth sentence,
+        # extract predicted sentences.
+        im2best_text_idxs = np.argmax(pred_adj, axis=0)
+        im2all_predicted_captions = [text[idx][0] for idx in im2best_text_idxs]
+        
+        im2predicted_captions = {}
+        im2ground_truth_captions = collections.defaultdict(list)
+        
         for text_idx, t in enumerate(text):
             if t[1] == -1: continue
             true_adj[text_idx, t[1]] = 1
         for image_idx, t in enumerate(images):
             if t[1] == -1: continue
+            im2predicted_captions[image_idx] = im2all_predicted_captions[image_idx]
+            im2ground_truth_captions[image_idx].append(text[t[1]][0])
             true_adj[t[1], image_idx] = 1
 
+        for img_idx, pred in im2predicted_captions.items():
+            all_refs.append(im2ground_truth_captions[img_idx])
+            all_sys.append(pred)
+       
         pred_adj = pred_adj.flatten()
         true_adj = true_adj.flatten()
 
@@ -74,8 +102,47 @@ def compute_match_metrics_doc(docs,
 
         all_aucs.append(roc_auc_score(true_adj, pred_adj))
     tf.get_logger().setLevel('INFO')
+
+    print(len(all_refs))
+    n_refs_max = np.max([len(r) for r in all_refs])
+    print('{} references maximum'.format(n_refs_max))
+    all_refs_final = []
+    for outer_idx in range(n_refs_max):
+        cur_refs = [all_refs[inner_idx][min(outer_idx, len(all_refs[inner_idx])-1)]
+                    for inner_idx in range(len(all_refs))]
+        all_refs_final.append(cur_refs)
+    
+    all_mt_metrics = compute_mt_metrics(all_sys, all_refs_final)
     return all_aucs, all_match_metrics
 
+
+def compute_mt_metrics(all_sys, all_refs):
+    sacre_bleu = sacrebleu.corpus_bleu(all_sys, all_refs)
+
+    #res = {idx: pred for idx, pred in enumerate(all_sys)}
+    #gts = {idx: gt_list for idx, gt_list in enumerate(all_refs)}
+    
+    tokenizer = PTBTokenizer()
+
+    def tokenize_list(lst_in):
+        tmp_dict = {idx: v for idx, v in enumerate(lst_in)}
+        tokenizer.tokenize(tmp_dict)
+        return [tmp_dict[idx] for idx in range(len(lst_in))]
+    
+    gts = tokenize_list(all_sys)
+    res = [tokenize_list(r) for r in all_refs]
+
+    scorers = [
+        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+        (Meteor(),"METEOR"),
+        (Rouge(), "ROUGE_L"),
+        (Cider(), "CIDEr")
+    ]
+    
+    for scorer, method in scorers:
+        print('computing %s score...'%(scorer.method()))
+        score, scores = scorer.compute_score(gts, res)
+        print(score, scores)
 
 def compute_feat_spread(feats_in):
     feats_in = sklearn.preprocessing.normalize(feats_in)
