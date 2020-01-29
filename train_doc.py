@@ -182,6 +182,10 @@ def parse_args():
                         default='hinge',
                         choices=['hinge', 'logistic'],
                         type=str)
+    parser.add_argument('--compute_mscoco_eval_metrics',
+                        help='Should we compute the mscoco MT metrics?',
+                        default=0,
+                        type=int)
     args = parser.parse_args()
 
     # check to make sure that various flags are set correctly

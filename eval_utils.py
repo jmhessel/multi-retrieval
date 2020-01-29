@@ -111,14 +111,17 @@ def compute_match_metrics_doc(docs,
                     for inner_idx in range(len(all_refs))]
         all_refs_final.append(cur_refs)
     
-    all_mt_metrics = compute_mt_metrics(all_sys, all_refs_final)
+    all_mt_metrics = compute_mt_metrics(all_sys, all_refs_final, args)
     return all_aucs, all_match_metrics, all_mt_metrics
 
 
-def compute_mt_metrics(all_sys, all_refs):
+def compute_mt_metrics(all_sys, all_refs, args):
     res_dict = {}
     sacre_bleu = sacrebleu.corpus_bleu(all_sys, all_refs)
     res_dict['sacre_bleu'] = sacre_bleu.score
+
+    if not args.compute_mscoco_eval_metrics:
+        return res_dict
     
     try:
         tokenizer = PTBTokenizer()
