@@ -35,6 +35,14 @@ matrices with word2vec embeddings. You can download those embeddings
 recommended to use the option `--word2vec_binary XXX` where XXX is the
 path to the extracted/downloaded word embeddings.
 
+*A note about evaluating with MT metrics:* the machine translation
+metrics, with the exception of sacrebleu, are based on
+[pycocoevalcap](https://github.com/salaniz/pycocoevalcap) which itself
+has several dependencies. In particular, it requires java 1.8+, and
+for the permissions setting to be set so that temporary files can be
+written wherever pip installs pycocoevalcap. If you don't have these
+additional, only BLEU will be computed, and a warning will print.
+
 ## How to run
 
 ### Preparing the dataset

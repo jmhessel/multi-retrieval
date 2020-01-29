@@ -524,7 +524,7 @@ def main():
         single_image_doc_model = tf.keras.models.load_model(best_image_model_str)
 
         if ground_truth:
-            val_aucs, val_match_metrics = eval_utils.compute_match_metrics_doc(
+            val_aucs, val_match_metrics, val_mt_metrics = eval_utils.compute_match_metrics_doc(
                 val,
                 image_features,
                 image_idx2row,
@@ -533,7 +533,7 @@ def main():
                 single_img_doc_model,
                 args)
 
-            test_aucs, test_match_metrics = eval_utils.compute_match_metrics_doc(
+            test_aucs, test_match_metrics, test_mt_metrics = eval_utils.compute_match_metrics_doc(
                 test,
                 image_features,
                 image_idx2row,
@@ -544,14 +544,18 @@ def main():
         else:
             val_aucs, test_aucs = None, None
             val_match_metrics, test_match_metrics = None, None
+            val_mt_metrics, test_mt_metrics = None, None
 
+            
         output = {'logs':best_logs,
                   'best_sentence_model_str':best_sentence_model_str,
                   'best_image_model_str':best_image_model_str,
                   'val_aucs':val_aucs,
                   'val_match_metrics':val_match_metrics,
+                  'val_mt_metrics':val_mt_metrics,
                   'test_aucs':test_aucs,
                   'test_match_metrics':test_match_metrics,
+                  'test_mt_metrics':test_mt_metrics,
                   'args':args,
                   'epoch':best_epoch}
 

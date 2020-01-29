@@ -103,9 +103,8 @@ def compute_match_metrics_doc(docs,
         all_aucs.append(roc_auc_score(true_adj, pred_adj))
     tf.get_logger().setLevel('INFO')
 
-    print(len(all_refs))
     n_refs_max = np.max([len(r) for r in all_refs])
-    print('{} references maximum'.format(n_refs_max))
+    
     all_refs_final = []
     for outer_idx in range(n_refs_max):
         cur_refs = [all_refs[inner_idx][min(outer_idx, len(all_refs[inner_idx])-1)]
@@ -113,36 +112,53 @@ def compute_match_metrics_doc(docs,
         all_refs_final.append(cur_refs)
     
     all_mt_metrics = compute_mt_metrics(all_sys, all_refs_final)
-    return all_aucs, all_match_metrics
+    return all_aucs, all_match_metrics, all_mt_metrics
 
 
 def compute_mt_metrics(all_sys, all_refs):
+    res_dict = {}
     sacre_bleu = sacrebleu.corpus_bleu(all_sys, all_refs)
-
-    #res = {idx: pred for idx, pred in enumerate(all_sys)}
-    #gts = {idx: gt_list for idx, gt_list in enumerate(all_refs)}
+    res_dict['sacre_bleu'] = sacre_bleu.score
     
-    tokenizer = PTBTokenizer()
+    try:
+        tokenizer = PTBTokenizer()
 
-    def tokenize_list(lst_in):
-        tmp_dict = {idx: v for idx, v in enumerate(lst_in)}
-        tokenizer.tokenize(tmp_dict)
-        return [tmp_dict[idx] for idx in range(len(lst_in))]
-    
-    gts = tokenize_list(all_sys)
-    res = [tokenize_list(r) for r in all_refs]
+        def tokenize_list(lst_in):
+            tmp_dict = {idx: [{'caption':v}] for idx, v in enumerate(lst_in)}
+            tmp_dict = tokenizer.tokenize(tmp_dict)
+            return [tmp_dict[idx][0] for idx in range(len(lst_in))]
 
-    scorers = [
-        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
-        (Meteor(),"METEOR"),
-        (Rouge(), "ROUGE_L"),
-        (Cider(), "CIDEr")
-    ]
-    
-    for scorer, method in scorers:
-        print('computing %s score...'%(scorer.method()))
-        score, scores = scorer.compute_score(gts, res)
-        print(score, scores)
+        res = tokenize_list(all_sys)
+        gts = [tokenize_list(r) for r in all_refs]
+
+        # we need a dictionary mapping
+        # unique_idx --> pred and unique_idx --> [gts]
+        res_dict_coco = {idx: [r] for idx, r in enumerate(res)}
+        gts_dict_coco = collections.defaultdict(list)
+        for lst in gts:
+            for idx, cap in enumerate(lst):
+                gts_dict_coco[idx].append(cap)
+
+        scorers = [
+            (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+            (Meteor(), "METEOR"),
+            (Rouge(), "ROUGE_L"),
+            (Cider(), "CIDEr")
+        ]
+
+        for scorer, method in scorers:
+            score, _ = scorer.compute_score(gts_dict_coco, res_dict_coco)
+            if type(method) is list:
+                for s, m in zip(score, method):
+                    res_dict['MSCOCO_{}'.format(m)] = s
+            else:
+                res_dict['MSCOCO_{}'.format(method)] = score
+    except Exception as e:
+        print('Unable to compute MSCOCO metrics: {}'.format(e))
+        print('continuing nonetheless')
+
+    return res_dict
+
 
 def compute_feat_spread(feats_in):
     feats_in = sklearn.preprocessing.normalize(feats_in)
@@ -215,13 +231,13 @@ def print_all_metrics(data,
                       single_img_doc_model,
                       args):
     metrics_dict = {}
-    aucs, rec2prec = compute_match_metrics_doc(data,
-                                               image_features,
-                                               image_idx2row,
-                                               word2idx,
-                                               single_text_doc_model,
-                                               single_img_doc_model,
-                                               args)
+    aucs, rec2prec, mt_metrics = compute_match_metrics_doc(data,
+                                                           image_features,
+                                                           image_idx2row,
+                                                           word2idx,
+                                                           single_text_doc_model,
+                                                           single_img_doc_model,
+                                                           args)
     print('Validation AUC={:.2f}'.format(100*np.mean(aucs)))
     metrics_dict['aucs'] = 100 * np.mean(aucs)
     prec = {}
@@ -232,4 +248,6 @@ def print_all_metrics(data,
         metrics_dict['p@{}'.format(k)] = res
         prec_str += 'p@{}={:.2f} '.format(k, res)
     print(prec_str.strip())
+    print('Machine translation metrics: {}'.format(str(mt_metrics)))
+    metrics_dict['mt_metrics'] = mt_metrics
     return metrics_dict
