@@ -103,44 +103,63 @@ def compute_match_metrics_doc(docs,
         all_aucs.append(roc_auc_score(true_adj, pred_adj))
     tf.get_logger().setLevel('INFO')
 
-    n_refs_max = np.max([len(r) for r in all_refs])
-    
-    all_refs_final = []
-    for outer_idx in range(n_refs_max):
-        cur_refs = [all_refs[inner_idx][min(outer_idx, len(all_refs[inner_idx])-1)]
-                    for inner_idx in range(len(all_refs))]
-        all_refs_final.append(cur_refs)
-    
-    all_mt_metrics = compute_mt_metrics(all_sys, all_refs_final, args)
+    # give each instance a unique IDX for the metric computation...
+    all_refs = {idx: refs for idx, refs in enumerate(all_refs)}
+    all_sys = {idx: pred for idx, pred in enumerate(all_sys)}
+
+    all_mt_metrics = compute_mt_metrics(all_sys, all_refs, args)
     return all_aucs, all_match_metrics, all_mt_metrics
 
 
 def compute_mt_metrics(all_sys, all_refs, args):
+    '''
+    # we need a dictionary mapping
+    all_sys maps {unique_idx --> pred}
+    all_ref maps {unique_idx --> [ground truths]
+    '''
     res_dict = {}
-    sacre_bleu = sacrebleu.corpus_bleu(all_sys, all_refs)
-    res_dict['sacre_bleu'] = sacre_bleu.score
 
+    # need all cases to have the same number of references for
+    # sacrebleu. however --- this will not always be the case in our
+    # data, e.g., if an image has two ground truths. If there's an
+    # image with 3 ground truth links, we can repeat ground truths
+    # until all have 3. However --- this duplication modifies some
+    # of the corpus-level normalizations, in particular, the number
+    # of ground truth tokens. So --- we should prefer the MSCOCO
+    # bleu scorer in this case. However --- we'll still compute
+    # the sacrebleu scores anyway, but include a flag that says
+    # to not trust them.
+    
+    # add in repeated predictions for cases will less than
+    # the maximum number of references:
+
+    n_refs_max = np.max([len(r) for r in all_refs.values()])
+    n_refs_min = np.min([len(r) for r in all_refs.values()])
+
+    print('Using {} maximum references for MT metrics'.format(n_refs_max))
+    
+    trust_sacrebleu = n_refs_max == n_refs_min
+    
+    all_refs_sacrebleu = []
+    for outer_idx in range(n_refs_max):
+        cur_refs = [all_refs[inner_idx][min(outer_idx, len(all_refs[inner_idx])-1)]
+                    for inner_idx in range(len(all_refs))]
+        all_refs_sacrebleu.append(cur_refs)
+    
+    sacre_bleu = sacrebleu.corpus_bleu([all_sys[idx] for idx in range(len(all_sys))], all_refs_sacrebleu)
+    res_dict['sacre_bleu'] = sacre_bleu.score
+    res_dict['can_trust_sacrebleu_with_global_counts'] = trust_sacrebleu
+    
     if not args.compute_mscoco_eval_metrics:
         return res_dict
     
     try:
         tokenizer = PTBTokenizer()
+        coco_sys = {idx: [{'caption': r}] for idx, r in all_sys.items()}
+        coco_sys = tokenizer.tokenize(coco_sys)
 
-        def tokenize_list(lst_in):
-            tmp_dict = {idx: [{'caption':v}] for idx, v in enumerate(lst_in)}
-            tmp_dict = tokenizer.tokenize(tmp_dict)
-            return [tmp_dict[idx][0] for idx in range(len(lst_in))]
-
-        res = tokenize_list(all_sys)
-        gts = [tokenize_list(r) for r in all_refs]
-
-        # we need a dictionary mapping
-        # unique_idx --> pred and unique_idx --> [gts]
-        res_dict_coco = {idx: [r] for idx, r in enumerate(res)}
-        gts_dict_coco = collections.defaultdict(list)
-        for lst in gts:
-            for idx, cap in enumerate(lst):
-                gts_dict_coco[idx].append(cap)
+        coco_ref = {idx: [{'caption': r} for r in refs] for idx, refs in all_refs.items()}
+        coco_ref = tokenizer.tokenize(coco_ref)
 
         scorers = [
             (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
@@ -150,7 +169,7 @@ def compute_mt_metrics(all_sys, all_refs, args):
         ]
 
         for scorer, method in scorers:
-            score, _ = scorer.compute_score(gts_dict_coco, res_dict_coco)
+            score, _ = scorer.compute_score(coco_ref, coco_sys)
             if type(method) is list:
                 for s, m in zip(score, method):
                     res_dict['MSCOCO_{}'.format(m)] = s
