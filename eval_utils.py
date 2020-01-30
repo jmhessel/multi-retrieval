@@ -78,10 +78,12 @@ def compute_match_metrics_doc(docs,
             true_adj[text_idx, t[1]] = 1
         for image_idx, t in enumerate(images):
             if t[1] == -1: continue
-            im2predicted_captions[image_idx] = im2all_predicted_captions[image_idx]
-            im2ground_truth_captions[image_idx].append(text[t[1]][0])
             true_adj[t[1], image_idx] = 1
 
+        for text_gt_idx, image_gt_idx in zip(*np.where(true_adj==1)):
+            im2predicted_captions[image_gt_idx] = im2all_predicted_captions[image_idx]
+            im2ground_truth_captions[image_gt_idx].append(text[text_gt_idx][0])
+            
         for img_idx, pred in im2predicted_captions.items():
             all_refs.append(im2ground_truth_captions[img_idx])
             all_sys.append(pred)
