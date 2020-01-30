@@ -6,4 +6,6 @@ tqdm
 spacy
 gensim
 nltk
+sacrebleu
 tensorflow>=2.1
+git+https://github.com/jmhessel/pycocoevalcap
