@@ -186,6 +186,11 @@ def parse_args():
                         help='Should we compute the mscoco MT metrics?',
                         default=0,
                         type=int)
+    parser.add_argument('--lr_warmup_steps',
+                        help='If positive value, we will warmup the learning rate linearly '
+                        'over this many steps.',
+                        default=-1,
+                        type=int)
     args = parser.parse_args()
 
     # check to make sure that various flags are set correctly
@@ -515,6 +520,13 @@ def main():
             single_img_doc_model,
             args)
         callbacks.append(metrics_printer)
+
+
+    if args.lr_warmup_steps > 0:
+        warmup_lr = training_utils.LearningRateLinearIncrease(
+            args.lr,
+            args.lr_warmup_steps)
+        callbacks.append(warmup_lr)
         
     history = model.fit(
         train_seq,
