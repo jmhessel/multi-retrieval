@@ -215,3 +215,25 @@ class PrintMetrics(tf.keras.callbacks.Callback):
         self.epoch.append(epoch)
         for k, v in metrics.items():
             self.history.setdefault(k, []).append(v)
+
+
+class LearningRateLinearIncrease(tf.keras.callbacks.Callback):
+    def __init__(self, max_lr, warmup_steps, verbose=0):
+        super(LearningRateLinearIncrease, self).__init__()
+        self.max_lr = max_lr
+        self.warmup_steps = warmup_steps
+        self.verbose = verbose
+        self.cur_step_count = 0
+
+    def on_train_begin(self, logs=None):
+        tf.keras.backend.set_value(self.model.optimizer.lr, 0.0)
+        
+    def on_batch_begin(self, batch, logs=None):
+        if self.cur_step_count >= self.warmup_steps:
+            return
+        lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
+        lr += 1./self.warmup_steps * self.max_lr
+        if self.verbose and self.cur_step_count % 50 == 0:
+            print('\n new LR = {}\n'.format(lr))
+        tf.keras.backend.set_value(self.model.optimizer.lr, lr)
+        self.cur_step_count += 1
