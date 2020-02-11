@@ -5,6 +5,7 @@ import tensorflow as tf
 import tqdm
 import numpy as np
 import pprint
+import warnings
 
 from gensim.models.keyedvectors import KeyedVectors
 
@@ -87,6 +88,13 @@ def text_to_matrix(captions, vocab, max_len=15, padding='post'):
         #    expecting CuDNN to return junk anyway in those cases, so this
         #    should be fine, but I will experimentally verify
         idxs = [vocab[v] if v in vocab else vocab['<UNK>'] for v in tokens]
+
+        if len(idxs) == 0:
+            warnings.warn(
+                'Wanring: detected at least one zero-length sentence. '
+                'Running will continue, but check your inputs.')
+            idxs = [vocab['<UNK>']]
+                
         seqs.append(idxs)
     m_mat = tf.keras.preprocessing.sequence.pad_sequences(seqs, maxlen=max_len,
                                                           padding=padding, truncating='post',
