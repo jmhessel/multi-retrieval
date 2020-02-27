@@ -80,6 +80,13 @@ def compute_match_metrics_doc(docs,
             if t[1] == -1: continue
             true_adj[t[1], image_idx] = 1
 
+        if np.sum(true_adj.flatten()) == 0:
+            print('Skipping no ground truth edges...')
+            continue
+        if np.sum(true_adj.flatten()) == len(true_adj):
+            print('Skipping only truth edges...')
+            continue
+            
         for text_gt_idx, image_gt_idx in zip(*np.where(true_adj==1)):
             im2predicted_captions[image_gt_idx] = im2all_predicted_captions[image_idx]
             im2ground_truth_captions[image_gt_idx].append(text[text_gt_idx][0])
@@ -91,12 +98,6 @@ def compute_match_metrics_doc(docs,
         pred_adj = pred_adj.flatten()
         true_adj = true_adj.flatten()
 
-        if np.sum(true_adj) == 0:
-            print('Skipping no ground truth edges...')
-            continue
-        if np.sum(true_adj) == len(true_adj):
-            print('Skipping only truth edges...')
-            continue
 
         pred_order = true_adj[np.argsort(-pred_adj)]
         for k in ks:
@@ -109,7 +110,10 @@ def compute_match_metrics_doc(docs,
     all_refs = {idx: refs for idx, refs in enumerate(all_refs)}
     all_sys = {idx: pred for idx, pred in enumerate(all_sys)}
 
-    all_mt_metrics = compute_mt_metrics(all_sys, all_refs, args)
+    if len(all_refs) > 0:
+        all_mt_metrics = compute_mt_metrics(all_sys, all_refs, args)
+    else:
+        all_mt_metrics = {}
     return all_aucs, all_match_metrics, all_mt_metrics
 
 
