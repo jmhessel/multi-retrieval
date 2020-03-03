@@ -186,6 +186,10 @@ def parse_args():
                         help='Should we compute the mscoco MT metrics?',
                         default=0,
                         type=int)
+    parser.add_argument('--compute_metrics_train',
+                        help='Should we also compute metrics over the training set?',
+                        default=0,
+                        type=int)
     parser.add_argument('--lr_warmup_steps',
                         help='If positive value, we will warmup the learning rate linearly '
                         'over this many steps.',
@@ -521,7 +525,17 @@ def main():
             single_img_doc_model,
             args)
         callbacks.append(metrics_printer)
-
+        if args.compute_metrics_train:
+            metrics_printer = training_utils.PrintMetrics(
+            train,
+            image_features,
+            image_idx2row,
+            word2idx,
+            single_text_doc_model,
+            single_img_doc_model,
+            args)
+            callbacks.append(metrics_printer)
+        
 
     if args.lr_warmup_steps > 0:
         warmup_lr = training_utils.LearningRateLinearIncrease(
@@ -558,21 +572,41 @@ def main():
                 single_text_doc_model,
                 single_img_doc_model,
                 args)
+            if args.compute_metrics_train:
+                train_aucs, train_match_metrics, train_mt_metrics = eval_utils.compute_match_metrics_doc(
+                    train,
+                    image_features,
+                    image_idx2row,
+                    word2idx,
+                    single_text_doc_model,
+                    single_img_doc_model,
+                    args)
+            else:
+                train_aucs, train_match_metrics, train_mt_metrics = None, None, None
+            
         else:
-            val_aucs, test_aucs = None, None
-            val_match_metrics, test_match_metrics = None, None
-            val_mt_metrics, test_mt_metrics = None, None
+            train_aucs, val_aucs, test_aucs = None, None, None
+            train_match_metrics, val_match_metrics, test_match_metrics = None, None, None
+            train_mt_metrics, val_mt_metrics, test_mt_metrics = None, None, None
 
             
         output = {'logs':best_logs,
+                  
                   'best_sentence_model_str':best_sentence_model_str,
                   'best_image_model_str':best_image_model_str,
+                  
+                  'train_aucs':train_aucs,
+                  'train_match_metrics':train_match_metrics,
+                  'train_mt_metrics':train_mt_metrics,
+                  
                   'val_aucs':val_aucs,
                   'val_match_metrics':val_match_metrics,
                   'val_mt_metrics':val_mt_metrics,
+
                   'test_aucs':test_aucs,
                   'test_match_metrics':test_match_metrics,
                   'test_mt_metrics':test_mt_metrics,
+
                   'args':args,
                   'epoch':best_epoch}
 
