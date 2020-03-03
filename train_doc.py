@@ -464,6 +464,7 @@ def main():
     if args.test_eval > 0:
         train = train[:args.test_eval * args.docs_per_batch]
         val = val[:args.test_eval * args.docs_per_batch]
+        test = test[:args.test_eval * args.docs_per_batch]
         
     train_seq = training_utils.DocumentSequence(
         train,

@@ -81,10 +81,8 @@ def compute_match_metrics_doc(docs,
             true_adj[t[1], image_idx] = 1
 
         if np.sum(true_adj.flatten()) == 0:
-            print('Skipping no ground truth edges...')
             continue
         if np.sum(true_adj.flatten()) == len(true_adj):
-            print('Skipping only truth edges...')
             continue
             
         for text_gt_idx, image_gt_idx in zip(*np.where(true_adj==1)):
@@ -230,8 +228,8 @@ def save_predictions(docs,
         cur_images = np.expand_dims(cur_images, 0)
         cur_text = np.expand_dims(cur_text, 0)
 
-        text_vec = text_trans.predict_on_batch(cur_text) 
-        image_vec = image_trans.predict_on_batch(cur_images)
+        text_vec = text_trans.predict(cur_text) 
+        image_vec = image_trans.predict(cur_images)
 
         text_vec = text_vec[0,:n_text,:]
         image_vec = image_vec[0,:n_image,:]
