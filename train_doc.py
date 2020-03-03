@@ -525,16 +525,6 @@ def main():
             single_img_doc_model,
             args)
         callbacks.append(metrics_printer)
-        if args.compute_metrics_train:
-            metrics_printer = training_utils.PrintMetrics(
-            train,
-            image_features,
-            image_idx2row,
-            word2idx,
-            single_text_doc_model,
-            single_img_doc_model,
-            args)
-            callbacks.append(metrics_printer)
         
 
     if args.lr_warmup_steps > 0:
