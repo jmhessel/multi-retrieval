@@ -551,6 +551,21 @@ def main():
 
     if args.output:
         best_image_model_str, best_sentence_model_str, best_logs, best_epoch = sdm.best_checkpoints_and_logs
+
+        # compute train doc metrics on current weights, because it (probably) has lowest training error.
+        if ground_truth and args.compute_metrics_train:
+
+            train_aucs, train_match_metrics, train_mt_metrics = eval_utils.compute_match_metrics_doc(
+                train,
+                image_features,
+                image_idx2row,
+                word2idx,
+                single_text_doc_model,
+                single_img_doc_model,
+                args)
+        else:
+            train_aucs, train_match_metrics, train_mt_metrics = None, None, None
+        
         single_text_doc_model = tf.keras.models.load_model(best_sentence_model_str)
         single_image_doc_model = tf.keras.models.load_model(best_image_model_str)
 
@@ -572,17 +587,6 @@ def main():
                 single_text_doc_model,
                 single_img_doc_model,
                 args)
-            if args.compute_metrics_train:
-                train_aucs, train_match_metrics, train_mt_metrics = eval_utils.compute_match_metrics_doc(
-                    train,
-                    image_features,
-                    image_idx2row,
-                    word2idx,
-                    single_text_doc_model,
-                    single_img_doc_model,
-                    args)
-            else:
-                train_aucs, train_match_metrics, train_mt_metrics = None, None, None
             
         else:
             train_aucs, val_aucs, test_aucs = None, None, None
