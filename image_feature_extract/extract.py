@@ -38,13 +38,6 @@ if __name__ == "__main__":
         quit()
 
 
-    gpu_memory_frac = .45
-    if gpu_memory_frac > 0 and gpu_memory_frac < 1:
-        config = tf.ConfigProto()
-        config.gpu_options.per_process_gpu_memory_fraction = gpu_memory_frac
-        session = tf.Session(config=config)
-        K.set_session(session)
-        
     keras.backend.set_learning_phase(0)
     do_center_crop = True
 
@@ -57,7 +50,7 @@ if __name__ == "__main__":
             all_paths.append(line.strip())
             
     print("Extracting from {} files".format(len(all_paths)))
-            
+    
     print('Saving to {}'.format(fpath))
     base_model = DenseNet169(include_top=False, input_shape=(224,224,3))
     base_model.trainable = False
@@ -79,14 +72,13 @@ if __name__ == "__main__":
                   outputs=trans)
     model.summary()
 
-    # model = keras.utils.multi_gpu_model(model, 2)
-    print('moved the image model to the multi gpus!')
     batch_size = 100
     print('Getting started...')
     gen = image_generator(all_paths, batch_size)
+    
     feats = model.predict_generator(gen,
                                     np.ceil(len(all_paths)/batch_size),
-                                    use_multiprocessing=True,
+                                    use_multiprocessing=False,
                                     workers=1,
                                     verbose=1)
     print(feats.shape)
