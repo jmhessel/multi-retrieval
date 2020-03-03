@@ -63,8 +63,6 @@ def compute_match_metrics_doc(docs,
         image_vec = image_vec[0,:n_image,:]
         
         pred_adj = text_vec.dot(image_vec.transpose())
-        # add tiebreaking randomly
-        pred_adj += np.random.normal(scale=1e-9, size=pred_adj.shape)
         true_adj = np.zeros((len(text), len(images)))
 
         # for MT metrics, for each image with a ground-truth sentence,

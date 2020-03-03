@@ -22,7 +22,7 @@ def load_ordered_ids(fname):
     with open(fname) as f:
         for line in f:
             if line.strip():
-                ids.append(line.split('/')[-1].split('.')[0])
+                ids.append('.'.join(line.split('/')[-1].split('.')[:-1]))
     return ids
 
 
