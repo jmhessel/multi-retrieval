@@ -188,7 +188,7 @@ def parse_args():
                         type=int)
     parser.add_argument('--compute_metrics_train',
                         help='Should we also compute metrics over the training set?',
-                        default=0,
+                        default=1,
                         type=int)
     parser.add_argument('--lr_warmup_steps',
                         help='If positive value, we will warmup the learning rate linearly '
