@@ -242,6 +242,22 @@ def main():
         max_n_sentence = max(max_n_sentence, len(sents))
         max_n_image = max(max_n_image, len(imgs))
 
+
+    # remove zero image/zero sentence cases:
+    before_lens = list(map(len, [train, val, test]))
+    
+    train = [t for t in train if len(t[0]) > 0 and len(t[1]) > 0]
+    val = [t for t in val if len(t[0]) > 0 and len(t[1]) > 0]
+    test = [t for t in test if len(t[0]) > 0 and len(t[1]) > 0]
+
+    after_lens = list(map(len, [train, val, test]))
+    for bl, al, split in zip(before_lens, after_lens, ['train', 'val', 'test']):
+        if bl == al: continue
+        print('Removed {} documents from {} split that had zero images and/or sentences'.format(
+            bl-al, split))
+        
+    
+    
     print('Max n sentence={}, max n image={}'.format(max_n_sentence, max_n_image))
     if args.cached_vocab:
         print('Saving/loading vocab from {}'.format(args.cached_vocab))
