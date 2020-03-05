@@ -159,12 +159,16 @@ def compute_mt_metrics(all_sys, all_refs, args):
     
     try:
         tokenizer = PTBTokenizer()
-        coco_sys = {idx: [{'caption': r}] for idx, r in all_sys.items()}
+        coco_sys = {idx: [{'caption': ' '.join(r.split())}] for idx, r in all_sys.items()}
+        print(coco_sys)
         coco_sys = tokenizer.tokenize(coco_sys)
-
-        coco_ref = {idx: [{'caption': r} for r in refs] for idx, refs in all_refs.items()}
+        print(coco_sys)
+        
+        coco_ref = {idx: [{'caption': ' '.join(r.split())} for r in refs] for idx, refs in all_refs.items()}
+        print(coco_ref)
         coco_ref = tokenizer.tokenize(coco_ref)
-
+        print(coco_ref)
+        
         scorers = [
             (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
             (Meteor(), "METEOR"),
