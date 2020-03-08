@@ -255,9 +255,7 @@ def main():
         if bl == al: continue
         print('Removed {} documents from {} split that had zero images and/or sentences'.format(
             bl-al, split))
-        
-    
-    
+            
     print('Max n sentence={}, max n image={}'.format(max_n_sentence, max_n_image))
     if args.cached_vocab:
         print('Saving/loading vocab from {}'.format(args.cached_vocab))
@@ -558,9 +556,10 @@ def main():
     if args.output:
         best_image_model_str, best_sentence_model_str, best_logs, best_epoch = sdm.best_checkpoints_and_logs
 
-        # compute train doc metrics on current weights, because it (probably) has lowest training error.
-        if ground_truth and args.compute_metrics_train:
+        single_text_doc_model = tf.keras.models.load_model(best_sentence_model_str)
+        single_image_doc_model = tf.keras.models.load_model(best_image_model_str)
 
+        if ground_truth and args.compute_metrics_train:
             train_aucs, train_match_metrics, train_mt_metrics = eval_utils.compute_match_metrics_doc(
                 train,
                 image_features,
@@ -571,9 +570,7 @@ def main():
                 args)
         else:
             train_aucs, train_match_metrics, train_mt_metrics = None, None, None
-        
-        single_text_doc_model = tf.keras.models.load_model(best_sentence_model_str)
-        single_image_doc_model = tf.keras.models.load_model(best_image_model_str)
+
 
         if ground_truth:
             val_aucs, val_match_metrics, val_mt_metrics = eval_utils.compute_match_metrics_doc(
