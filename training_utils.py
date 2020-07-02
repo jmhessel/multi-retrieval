@@ -120,7 +120,7 @@ class DocumentSequence(tf.keras.utils.Sequence):
     
     def on_epoch_end(self):
         if self.shuffle_docs:
-            np.random.shuffle(data_in)
+            np.random.shuffle(self.data_in)
 
 
 class SaveDocModels(tf.keras.callbacks.Callback):
