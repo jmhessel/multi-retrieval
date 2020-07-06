@@ -195,6 +195,19 @@ def parse_args():
                         'over this many steps.',
                         default=-1,
                         type=int)
+    parser.add_argument('--l2_norm',
+                        help='If 1, we will l2 normalize extracted features, else, no normalization.',
+                        default=1,
+                        type=int)
+    parser.add_argument('--n_layers',
+                        help='How many layers in the encoders?',
+                        default=1,
+                        type=int,
+                        choices=[1,2,3])
+    parser.add_argument('--scale_image_features',
+                        help='Should we standard scale image features?',
+                        default=0,
+                        type=int)
     args = parser.parse_args()
 
     # check to make sure that various flags are set correctly
@@ -234,7 +247,7 @@ def main():
 
     data = load_data(args.documents)
     train, val, test = data['train'], data['val'], data['test']
-    
+
     np.random.shuffle(train); np.random.shuffle(val); np.random.shuffle(test)
     max_n_sentence, max_n_image = -1, -1
     for d in train + val + test:
@@ -242,10 +255,9 @@ def main():
         max_n_sentence = max(max_n_sentence, len(sents))
         max_n_image = max(max_n_image, len(imgs))
 
-
     # remove zero image/zero sentence cases:
     before_lens = list(map(len, [train, val, test]))
-    
+
     train = [t for t in train if len(t[0]) > 0 and len(t[1]) > 0]
     val = [t for t in val if len(t[0]) > 0 and len(t[1]) > 0]
     test = [t for t in test if len(t[0]) > 0 and len(t[1]) > 0]
@@ -255,7 +267,7 @@ def main():
         if bl == al: continue
         print('Removed {} documents from {} split that had zero images and/or sentences'.format(
             bl-al, split))
-            
+
     print('Max n sentence={}, max n image={}'.format(max_n_sentence, max_n_image))
     if args.cached_vocab:
         print('Saving/loading vocab from {}'.format(args.cached_vocab))
@@ -279,6 +291,16 @@ def main():
     else:
         image_features = np.load(args.image_features)
         image_idx2row = load_data(args.image_id2row)
+
+        if args.scale_image_features:
+            ss = sklearn.preprocessing.StandardScaler()
+            all_train_images = []
+            for img, txt, cid in train:
+                all_train_images.extend([x[0] for x in img])
+            print('standard scaling with {} images total'.format(len(all_train_images)))
+            all_train_rows = [image_idx2row[cid] for cid in all_train_images]
+            ss.fit(image_features[np.array(all_train_rows)])
+            image_features = ss.transform(image_features)
 
     word_emb_dim = 300
 
@@ -319,20 +341,34 @@ def main():
             weights=[we_init] if we_init is not None else None,
             mask_zero=True)
         element_dropout = tf.keras.layers.SpatialDropout1D(args.dropout)
+
         if args.rnn_type == 'GRU':
-            word_rnn = tf.keras.layers.GRU(args.joint_emb_dim)
+            rnn_maker = tf.keras.layers.GRU
         else:
-            word_rnn = tf.keras.layers.LSTM(args.joint_emb_dim)
+            rnn_maker = tf.keras.layers.LSTM
+
+        enc_layers = []
+        for idx in range(args.n_layers):
+            if idx == args.n_layers-1:
+                enc_layers.append(rnn_maker(args.joint_emb_dim))
+            else:
+                enc_layers.append(rnn_maker(args.joint_emb_dim, return_sequences=True))
+
         embedded_text_inp = word_embedding(text_inp)
         embedded_text_inp = tf.keras.layers.TimeDistributed(element_dropout)(embedded_text_inp)
-        extracted_text_features = tf.keras.layers.TimeDistributed(word_rnn)(embedded_text_inp)
+
+        for l in enc_layers:
+            extracted_text_features = tf.keras.layers.TimeDistributed(l)(extracted_text_features)
+
         # extracted_text_features is now (n docs, max n setnences, multimodal dim)
-        l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
-        extracted_text_features = l2_norm_layer(extracted_text_features)
+        if args.l2_norm:
+            l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
+            extracted_text_features = l2_norm_layer(extracted_text_features)
+
         single_text_doc_model = tf.keras.models.Model(
             inputs=text_inp,
             outputs=extracted_text_features)
-        
+
     # Step 2.2: The image model:
     if args.image_model_checkpoint:
         print('Loading pretrained image model from {}'.format(
@@ -340,8 +376,8 @@ def main():
         single_img_doc_model = tf.keras.models.load_model(args.image_model_checkpoint)
         extracted_img_features = single_img_doc_model(img_inp)
     else:
-        img_projection = tf.keras.layers.Dense(args.joint_emb_dim)
         if args.end2end:
+            img_projection = tf.keras.layers.Dense(args.joint_emb_dim)
             from tf.keras.applications.nasnet import NASNetMobile
             cnn = tf.keras.applications.nasnet.NASNetMobile(
                 include_top=False, input_shape=(224, 224, 3), pooling='avg')
@@ -357,12 +393,23 @@ def main():
             if args.dropout > 0.0:
                 extracted_img_features = tf.keras.layers.TimeDistributed(
                     tf.keras.layers.Dropout(args.dropout))(extracted_img_features)
-            extracted_img_features = tf.keras.layers.TimeDistributed(
-                img_projection)(extracted_img_features)
+
+            enc_layers = []
+            for idx in range(args.n_layers):
+                if idx == args.n_layers-1:
+                    enc_layers.append(tf.keras.layers.Dense(args.joint_emb_dim))
+                else:
+                    enc_layers.append(tf.keras.layers.Dense(args.joint_emb_dim, activation='relu'))
+                    enc_layers.append(tf.keras.layers.BatchNormalization())
+
+            for l in enc_layers:
+                extracted_img_features = tf.keras.layers.TimeDistributed(l)(extracted_img_features)
 
         # extracted_img_features is now (n docs, max n images, multimodal dim)
-        l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
-        extracted_img_features = l2_norm_layer(extracted_img_features)
+        if args.l2_norm:
+            l2_norm_layer = tf.keras.layers.Lambda(lambda x: tf.nn.l2_normalize(x, axis=-1))
+            extracted_img_features = l2_norm_layer(extracted_img_features)
+
         single_img_doc_model = tf.keras.models.Model(
             inputs=img_inp,
             outputs=extracted_img_features)
@@ -434,7 +481,7 @@ def main():
     get_pos_neg_sims = model_utils.make_get_pos_neg_sims(
         args,
         sim_fn)
-    
+
     pos_sims, neg_img_sims, neg_text_sims = tf.keras.layers.Lambda(
         get_pos_neg_sims)([all_sims, text_n_inp, img_n_inp])
 
@@ -451,12 +498,12 @@ def main():
     elif args.loss_mode == 'softmax':
         def per_neg_loss(inp):
             pos_s, neg_s = inp
+            pos_s -= args.margin
             pos_l, neg_l = tf.ones_like(pos_s), tf.zeros_like(neg_s)
             return tf.nn.softmax_cross_entropy_with_logits(
                 tf.concat([pos_l, neg_l], axis=1),
                 tf.concat([pos_s, neg_s], axis=1))
-        
-        
+
     neg_img_losses = per_neg_loss([pos_sims, neg_img_sims])
     neg_text_losses = per_neg_loss([pos_sims, neg_text_sims])
 
@@ -474,7 +521,7 @@ def main():
     else:
         neg_img_loss = neg_img_losses
         neg_text_loss = neg_text_losses
-        
+
     inputs = [text_inp,
               img_inp,
               text_n_inp,
@@ -487,7 +534,6 @@ def main():
 
     def identity(y_true, y_pred):
         del y_true
-        # CHECK
         return tf.reduce_mean(y_pred, axis=-1)
 
     model.compile(opt, loss=identity)
@@ -496,7 +542,7 @@ def main():
         train = train[:args.test_eval * args.docs_per_batch]
         val = val[:args.test_eval * args.docs_per_batch]
         test = test[:args.test_eval * args.docs_per_batch]
-        
+
     train_seq = training_utils.DocumentSequence(
         train,
         image_features,
@@ -531,16 +577,15 @@ def main():
         val_loss_thresh = 2 * args.margin # constant prediction performance
     else:
         val_loss_thresh = np.inf
-    
+
     reduce_lr = training_utils.ReduceLROnPlateauAfterValLoss(
         activation_val_loss=val_loss_thresh,
         factor=args.lr_decay,
         patience=args.lr_patience,
         min_lr=args.min_lr,
         verbose=True)
-    
-    callbacks = [reduce_lr, sdm]
 
+    callbacks = [reduce_lr, sdm]
 
     if args.print_metrics:
         metrics_printer = training_utils.PrintMetrics(
@@ -552,14 +597,13 @@ def main():
             single_img_doc_model,
             args)
         callbacks.append(metrics_printer)
-        
 
     if args.lr_warmup_steps > 0:
         warmup_lr = training_utils.LearningRateLinearIncrease(
             args.lr,
             args.lr_warmup_steps)
         callbacks.append(warmup_lr)
-        
+
     history = model.fit(
         train_seq,
         epochs=args.n_epochs,
@@ -571,6 +615,10 @@ def main():
 
         single_text_doc_model = tf.keras.models.load_model(best_sentence_model_str)
         single_image_doc_model = tf.keras.models.load_model(best_image_model_str)
+
+        if args.scale_image_features:
+            with open(args.checkpoint_dir + '/image_standardscaler.pkl', 'wb') as f:
+                pickle.dump(ss, f)
 
         if ground_truth and args.compute_metrics_train:
             train_aucs, train_match_metrics, train_mt_metrics = eval_utils.compute_match_metrics_doc(
@@ -603,22 +651,22 @@ def main():
                 single_text_doc_model,
                 single_img_doc_model,
                 args)
-            
+
         else:
             train_aucs, val_aucs, test_aucs = None, None, None
             train_match_metrics, val_match_metrics, test_match_metrics = None, None, None
             train_mt_metrics, val_mt_metrics, test_mt_metrics = None, None, None
 
-            
+
         output = {'logs':best_logs,
-                  
+
                   'best_sentence_model_str':best_sentence_model_str,
                   'best_image_model_str':best_image_model_str,
-                  
+
                   'train_aucs':train_aucs,
                   'train_match_metrics':train_match_metrics,
                   'train_mt_metrics':train_mt_metrics,
-                  
+
                   'val_aucs':val_aucs,
                   'val_match_metrics':val_match_metrics,
                   'val_mt_metrics':val_mt_metrics,
@@ -629,6 +677,9 @@ def main():
 
                   'args':args,
                   'epoch':best_epoch}
+
+        if args.scale_image_features:
+            output['image_standard_scaler_str'] = args.checkpoint_dir + '/image_standardscaler.pkl'
 
         for k, v in history.history.items():
             output['history_{}'.format(k)] = v
