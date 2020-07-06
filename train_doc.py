@@ -356,7 +356,7 @@ def main():
                 enc_layers.append(rnn_maker(args.joint_emb_dim, return_sequences=True))
 
         embedded_text_inp = word_embedding(text_inp)
-        embedded_text_inp = tf.keras.layers.TimeDistributed(element_dropout)(embedded_text_inp)
+        extracted_text_features = tf.keras.layers.TimeDistributed(element_dropout)(embedded_text_inp)
 
         for l in enc_layers:
             extracted_text_features = tf.keras.layers.TimeDistributed(l)(extracted_text_features)
