@@ -180,7 +180,7 @@ def parse_args():
     parser.add_argument('--loss_mode',
                         help='What loss function should we use?',
                         default='hinge',
-                        choices=['hinge', 'logistic'],
+                        choices=['hinge', 'logistic', 'softmax'],
                         type=str)
     parser.add_argument('--compute_mscoco_eval_metrics',
                         help='Should we compute the mscoco MT metrics?',
@@ -442,26 +442,39 @@ def main():
         def per_neg_loss(inp):
             pos_s, neg_s = inp
             return tf.math.maximum(neg_s - pos_s + args.margin, 0)
-    else:
+    elif args.loss_mode == 'logistic':
         def per_neg_loss(inp):
             pos_s, neg_s = inp
             return tf.nn.sigmoid_cross_entropy_with_logits(
                 labels=tf.ones_like(neg_s),
                 logits=pos_s - neg_s)
+    elif args.loss_mode == 'softmax':
+        def per_neg_loss(inp):
+            pos_s, neg_s = inp
+            pos_l, neg_l = tf.ones_like(pos_s), tf.zeros_like(neg_s)
+            return tf.nn.softmax_cross_entropy_with_logits(
+                tf.concat([pos_l, neg_l], axis=1),
+                tf.concat([pos_s, neg_s], axis=1))
+        
         
     neg_img_losses = per_neg_loss([pos_sims, neg_img_sims])
     neg_text_losses = per_neg_loss([pos_sims, neg_text_sims])
 
-    if args.neg_mining == 'negative_sample':
-        pool_fn = lambda x: tf.reduce_mean(x, axis=1, keepdims=True)
-    elif args.neg_mining == 'hard_negative':
-        pool_fn = lambda x: tf.reduce_max(x, axis=1, keepdims=True)
+    if args.loss_mode != 'softmax':
+        if args.neg_mining == 'negative_sample':
+            pool_fn = lambda x: tf.reduce_mean(x, axis=1, keepdims=True)
+        elif args.neg_mining == 'hard_negative':
+            pool_fn = lambda x: tf.reduce_max(x, axis=1, keepdims=True)
+        else:
+            raise NotImplementedError('{} is not a valid for args.neg_mining'.format(
+                args.neg_mining))
+
+        neg_img_loss = tf.keras.layers.Lambda(pool_fn, name='neg_img')(neg_img_losses)
+        neg_text_loss = tf.keras.layers.Lambda(pool_fn, name='neg_text')(neg_text_losses)
     else:
-        raise NotImplementedError('{} is not a valid for args.neg_mining'.format(args.neg_mining))
-
-    neg_img_loss = tf.keras.layers.Lambda(pool_fn, name='neg_img')(neg_img_losses)
-    neg_text_loss = tf.keras.layers.Lambda(pool_fn, name='neg_text')(neg_text_losses)
-
+        neg_img_loss = neg_img_losses
+        neg_text_loss = neg_text_losses
+        
     inputs = [text_inp,
               img_inp,
               text_n_inp,
