@@ -20,6 +20,7 @@ import model_utils
 import training_utils
 import bipartite_utils
 import pickle
+import sklearn.preprocessing
 from pprint import pprint
 
 
