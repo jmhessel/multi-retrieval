@@ -3,7 +3,7 @@ Code to accompany
 "Unsupervised Discovery of Multimodal Links in Multi-Sentence/Multi-Image Documents."
 https://github.com/jmhessel/multi-retrieval
 
-This is a work-in-progress TF2.0 port.
+This is the version of the code using softmax
 '''
 import argparse
 import collections
@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument('--margin',
                         type=float,
                         help='Margin for computing hinge loss.',
-                        default=.2)
+                        default=.0003)
     parser.add_argument('--seq_len',
                         type=int,
                         help='Maximum token sequence length for each sentence before truncation.',
@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument('--docs_per_batch',
                         type=int,
                         help='How many docs per batch? 11 docs = 10 negative samples per doc.',
-                        default=11)
+                        default=26)
     parser.add_argument('--neg_mining',
                         help='What type of negative mining?',
                         default='hard_negative',
@@ -72,7 +72,7 @@ def parse_args():
     parser.add_argument('--lr',
                         type=float,
                         help='Starting learning rate',
-                        default=.0002)
+                        default=.0005)
     parser.add_argument('--n_epochs',
                         type=int,
                         help='How many epochs to run for?',
@@ -180,7 +180,7 @@ def parse_args():
                         'this model checkpoint.')
     parser.add_argument('--loss_mode',
                         help='What loss function should we use?',
-                        default='hinge',
+                        default='softmax',
                         choices=['hinge', 'logistic', 'softmax'],
                         type=str)
     parser.add_argument('--compute_mscoco_eval_metrics',
@@ -198,11 +198,11 @@ def parse_args():
                         type=int)
     parser.add_argument('--l2_norm',
                         help='If 1, we will l2 normalize extracted features, else, no normalization.',
-                        default=1,
+                        default=0,
                         type=int)
     parser.add_argument('--n_layers',
                         help='How many layers in the encoders?',
-                        default=1,
+                        default=2,
                         type=int,
                         choices=[1,2,3])
     parser.add_argument('--scale_image_features',
