@@ -1,4 +1,4 @@
-lapjv
+git+https://github.com/src-d/lapjv
 numpy
 scipy
 scikit-learn
